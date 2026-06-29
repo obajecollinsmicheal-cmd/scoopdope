@@ -18,6 +18,7 @@ import { EncryptionService } from '../common/encryption.service';
 import { ApiKeyStrategy } from './api-key.strategy';
 import { ApiKeyAuthGuard } from './api-key-auth.guard';
 import { AuditModule } from '../audit/audit.module';
+import { RateLimitModule } from '../rate-limit/rate-limit.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { AuditModule } from '../audit/audit.module';
     MailModule,
     PassportModule,
     AuditModule,
+    RateLimitModule,
     TypeOrmModule.forFeature([PasswordResetToken, RefreshToken, ApiKey]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

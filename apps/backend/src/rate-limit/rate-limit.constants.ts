@@ -15,3 +15,9 @@ export const DEFAULT_RATE_LIMITS: Record<UserRateLimitRole, RateLimitConfig> = {
 };
 
 export const AUTH_RATE_LIMIT: RateLimitConfig = { limit: 20, windowMs: 60000 };
+
+/**
+ * Per-IP rate limit applied to unauthenticated auth endpoints (login, register).
+ * 10 requests per minute per IP address.
+ */
+export const IP_AUTH_RATE_LIMIT: RateLimitConfig = { limit: 10, windowMs: 60000 };

@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { RateLimit } from '../rate-limit/rate-limit.decorator';
 import { AUTH_RATE_LIMIT } from '../rate-limit/rate-limit.constants';
+import { IpRateLimitGuard } from '../rate-limit/ip-rate-limit.guard';
 import { AuthService } from './auth.service';
 import { StellarAuthService } from './stellar-auth.service';
 import { GoogleAuthGuard } from './google-auth.guard'; // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -69,6 +70,7 @@ export class AuthController {
   }
 
   @Post('register')
+  @UseGuards(IpRateLimitGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @RateLimit({ limit: 5, windowMs: 60000 })
   @ApiOperation({ summary: 'Register a new user' })
@@ -85,6 +87,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @UseGuards(IpRateLimitGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @RateLimit({ limit: 5, windowMs: 60000 })
   @ApiOperation({ summary: 'Login with email and password' })
