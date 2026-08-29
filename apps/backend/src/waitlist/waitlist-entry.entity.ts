@@ -21,6 +21,7 @@ export class WaitlistEntry {
   @Column()
   userId: string;
 
+  // Why: a waitlist entry belongs to a user; deleting the user removes their waitlist spots.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
@@ -29,6 +30,7 @@ export class WaitlistEntry {
   @Column()
   courseId: string;
 
+  // Why: if a course is removed, its waitlist has no purpose and entries should be cleaned up.
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;

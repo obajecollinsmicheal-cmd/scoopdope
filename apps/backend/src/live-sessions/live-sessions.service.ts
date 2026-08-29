@@ -2,11 +2,14 @@ import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nest
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { DistributedLockService } from '../common/distributed-lock.service';
 import { LiveSession, SessionStatus } from './live-session.entity';
 import { CohortMember } from '../cohorts/cohort-member.entity';
 import { User } from '../users/user.entity';
+import { SessionJoin } from './session-join.entity';
 import { CreateLiveSessionDto, UpdateLiveSessionDto } from './live-session.dto';
 import { EmailService } from '../email/email.service';
+import { emailTemplates } from '../email/email.templates';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -17,8 +20,10 @@ export class LiveSessionsService {
     @InjectRepository(LiveSession) private repo: Repository<LiveSession>,
     @InjectRepository(CohortMember) private memberRepo: Repository<CohortMember>,
     @InjectRepository(User) private userRepo: Repository<User>,
+    @InjectRepository(SessionJoin) private joinRepo: Repository<SessionJoin>,
     private emailService: EmailService,
     private config: ConfigService,
+    private readonly distributedLockService: DistributedLockService,
   ) {}
 
   findByCohort(cohortId: string): Promise<LiveSession[]> {
@@ -58,33 +63,93 @@ export class LiveSessionsService {
     return this.repo.save(session);
   }
 
+  // ── Session Joining ────────────────────────────────────────────────────────
+
+  async joinSession(sessionId: string, userId: string): Promise<SessionJoin> {
+    // Verify session exists and is not cancelled
+    const session = await this.findOne(sessionId);
+    if (session.status === SessionStatus.CANCELLED) {
+      throw new ForbiddenException('This session has been cancelled');
+    }
+
+    // Check if user is enrolled in the cohort
+    const isMember = await this.memberRepo.findOne({
+      where: { cohortId: session.cohortId, userId },
+    });
+    if (!isMember) {
+      throw new ForbiddenException('You are not enrolled in this cohort');
+    }
+
+    // Check capacity
+    const currentAttendees = await this.joinRepo.count({
+      where: { sessionId },
+    });
+    if (currentAttendees >= session.maxCapacity) {
+      throw new ForbiddenException(
+        `Session is at full capacity (${session.maxCapacity}/${session.maxCapacity})`,
+      );
+    }
+
+    // Check if user already joined (idempotent)
+    let join = await this.joinRepo.findOne({
+      where: { sessionId, userId },
+    });
+    if (join) {
+      return join; // Already joined, return existing record
+    }
+
+    // Create join record
+    join = this.joinRepo.create({
+      sessionId,
+      userId,
+      joinToken: `join-token-${sessionId}-${userId}-${Date.now()}`,
+    });
+
+    return this.joinRepo.save(join);
+  }
+
+  async getSessionAttendees(sessionId: string): Promise<SessionJoin[]> {
+    return this.joinRepo.find({
+      where: { sessionId },
+      relations: ['user'],
+      order: { joinedAt: 'ASC' },
+    });
+  }
+
   // ── Reminders ─────────────────────────────────────────────────────────────
 
   @Cron(CronExpression.EVERY_MINUTE)
   async sendReminders(): Promise<void> {
-    const now = new Date();
-    const upcoming = await this.repo.find({
-      where: { status: SessionStatus.SCHEDULED, scheduledAt: MoreThan(now) },
-    });
+    const lockKey = 'lock:cron:liveSessions:sendReminders';
+    const result = await this.distributedLockService.withLock(lockKey, async () => {
+      const now = new Date();
+      const upcoming = await this.repo.find({
+        where: { status: SessionStatus.SCHEDULED, scheduledAt: MoreThan(now) },
+      });
 
-    for (const session of upcoming) {
-      const msUntil = session.scheduledAt.getTime() - now.getTime();
-      const hoursUntil = msUntil / 3_600_000;
-      const sent = session.remindersSent ?? [];
+      for (const session of upcoming) {
+        const msUntil = session.scheduledAt.getTime() - now.getTime();
+        const hoursUntil = msUntil / 3_600_000;
+        const sent = session.remindersSent ?? [];
 
-      const toSend: string[] = [];
-      if (hoursUntil <= 24 && hoursUntil > 23 && !sent.includes('24h')) toSend.push('24h');
-      if (hoursUntil <= 1 && hoursUntil > 0 && !sent.includes('1h')) toSend.push('1h');
+        const toSend: string[] = [];
+        if (hoursUntil <= 24 && hoursUntil > 23 && !sent.includes('24h')) toSend.push('24h');
+        if (hoursUntil <= 1 && hoursUntil > 0 && !sent.includes('1h')) toSend.push('1h');
 
-      for (const label of toSend) {
-        await this.notifyMembers(session, label);
-        sent.push(label);
+        for (const label of toSend) {
+          await this.notifyMembers(session, label);
+          sent.push(label);
+        }
+
+        if (toSend.length) {
+          session.remindersSent = sent;
+          await this.repo.save(session);
+        }
       }
+    }, 60);
 
-      if (toSend.length) {
-        session.remindersSent = sent;
-        await this.repo.save(session);
-      }
+    if (result === null) {
+      this.logger.debug('Skipping live session reminders because another instance holds the lock');
     }
   }
 
@@ -100,13 +165,19 @@ export class LiveSessionsService {
     const users = await this.getMembers(session.cohortId);
     const frontendUrl = this.config.get<string>('frontend.url');
     const icsContent = this.buildIcs(session, frontendUrl);
+    const date = session.scheduledAt.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
 
     for (const user of users) {
-      await this.emailService.enqueue(
-        user.email,
-        `📅 Live Session: ${session.title}`,
-        this.calendarInviteHtml(session, user.username ?? user.email, frontendUrl, icsContent),
-      );
+      const template = emailTemplates.calendarInvite({
+        userName: user.username ?? user.email,
+        sessionTitle: session.title,
+        date,
+        duration: session.durationMinutes,
+        joinUrl: session.meetingUrl,
+        sessionUrl: `${frontendUrl}/live-sessions/${session.id}`,
+      });
+
+      await this.emailService.enqueue(user.email, template.subject, template.html);
     }
     this.logger.log(`Calendar invites sent for session "${session.title}" to ${users.length} member(s)`);
   }
@@ -115,13 +186,19 @@ export class LiveSessionsService {
     const users = await this.getMembers(session.cohortId);
     const frontendUrl = this.config.get<string>('frontend.url');
     const timeLabel = label === '24h' ? '24 hours' : '1 hour';
+    const date = session.scheduledAt.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
 
     for (const user of users) {
-      await this.emailService.enqueue(
-        user.email,
-        `⏰ Reminder: "${session.title}" starts in ${timeLabel}`,
-        this.reminderHtml(session, user.username ?? user.email, timeLabel, frontendUrl),
-      );
+      const template = emailTemplates.liveSessionReminder({
+        userName: user.username ?? user.email,
+        sessionTitle: session.title,
+        date,
+        timeLabel,
+        joinUrl: session.meetingUrl || '',
+        sessionUrl: `${frontendUrl}/live-sessions/${session.id}`,
+      });
+
+      await this.emailService.enqueue(user.email, template.subject, template.html);
     }
     this.logger.log(`${label} reminders sent for session "${session.title}" to ${users.length} member(s)`);
   }
@@ -147,37 +224,5 @@ export class LiveSessionsService {
       'END:VEVENT',
       'END:VCALENDAR',
     ].join('\r\n');
-  }
-
-  private calendarInviteHtml(session: LiveSession, name: string, frontendUrl: string, ics: string): string {
-    const date = session.scheduledAt.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
-    return `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h2>📅 You're invited to a live session</h2>
-        <p>Hi ${name},</p>
-        <p><strong>${session.title}</strong> has been scheduled.</p>
-        <ul>
-          <li><strong>Date:</strong> ${date}</li>
-          <li><strong>Duration:</strong> ${session.durationMinutes} minutes</li>
-          ${session.meetingUrl ? `<li><strong>Join:</strong> <a href="${session.meetingUrl}">${session.meetingUrl}</a></li>` : ''}
-        </ul>
-        <p>Add to your calendar using the attached .ics file.</p>
-        <a href="${frontendUrl}/live-sessions/${session.id}" style="background:#4F46E5;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block">View Session</a>
-      </div>`;
-  }
-
-  private reminderHtml(session: LiveSession, name: string, timeLabel: string, frontendUrl: string): string {
-    const date = session.scheduledAt.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' });
-    return `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-        <h2>⏰ Session starting in ${timeLabel}</h2>
-        <p>Hi ${name},</p>
-        <p><strong>${session.title}</strong> starts in ${timeLabel}.</p>
-        <ul>
-          <li><strong>Date:</strong> ${date}</li>
-          ${session.meetingUrl ? `<li><strong>Join:</strong> <a href="${session.meetingUrl}">${session.meetingUrl}</a></li>` : ''}
-        </ul>
-        <a href="${session.meetingUrl ?? `${frontendUrl}/live-sessions/${session.id}`}" style="background:#059669;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block">Join Now</a>
-      </div>`;
   }
 }

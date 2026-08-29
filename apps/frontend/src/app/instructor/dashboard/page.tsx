@@ -120,7 +120,6 @@ export default function InstructorDashboardPage() {
       }
       setIsLoading(false);
     }
-    }
     load();
   }, []);
 

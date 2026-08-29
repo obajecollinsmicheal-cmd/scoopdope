@@ -276,45 +276,46 @@ impl LiquidityPoolContract {
         let reserve_a: i128 = env.storage().instance().get(&DataKey::ReserveA).unwrap_or(0);
         let reserve_b: i128 = env.storage().instance().get(&DataKey::ReserveB).unwrap_or(0);
 
-        let (reserve_in, reserve_out) = match token_in {
-            symbol_short!("bst") => (reserve_a, reserve_b),
-            symbol_short!("xlm") => (reserve_b, reserve_a),
-            _ => panic!("Invalid token"),
+        let (reserve_in, reserve_out) = if token_in == symbol_short!("bst") {
+            (reserve_a, reserve_b)
+        } else if token_in == symbol_short!("xlm") {
+            (reserve_b, reserve_a)
+        } else {
+            panic!("Invalid token")
         };
 
         // Calculate output amount with fee
-        let amount_in_with_fee = amount_in * (config.fee_denominator - config.fee_numerator);
-        let numerator = amount_in_with_fee * reserve_out;
-        let denominator = (reserve_in * config.fee_denominator) + amount_in_with_fee;
-        let amount_out = numerator / denominator;
+        let fee_num   = config.fee_numerator as i128;
+        let fee_denom = config.fee_denominator as i128;
+        let amount_in_with_fee = amount_in * (fee_denom - fee_num);
+        let numerator   = amount_in_with_fee * reserve_out;
+        let denominator = (reserve_in * fee_denom) + amount_in_with_fee;
+        let amount_out  = numerator / denominator;
 
         assert!(amount_out >= amount_out_min, "Insufficient output amount");
         assert!(amount_out <= reserve_out, "Insufficient liquidity");
 
         // Update reserves
-        match token_in {
-            symbol_short!("bst") => {
-                env.storage().instance().set(&DataKey::ReserveA, &(reserve_a + amount_in));
-                env.storage().instance().set(&DataKey::ReserveB, &(reserve_b - amount_out));
-            },
-            symbol_short!("xlm") => {
-                env.storage().instance().set(&DataKey::ReserveB, &(reserve_b + amount_in));
-                env.storage().instance().set(&DataKey::ReserveA, &(reserve_a - amount_out));
-            },
-            _ => {},
+        if token_in == symbol_short!("bst") {
+            env.storage().instance().set(&DataKey::ReserveA, &(reserve_a + amount_in));
+            env.storage().instance().set(&DataKey::ReserveB, &(reserve_b - amount_out));
+        } else if token_in == symbol_short!("xlm") {
+            env.storage().instance().set(&DataKey::ReserveB, &(reserve_b + amount_in));
+            env.storage().instance().set(&DataKey::ReserveA, &(reserve_a - amount_out));
         }
 
         // Calculate fee
-        let fee = (amount_in * config.fee_numerator) / config.fee_denominator;
+        let fee = (amount_in * fee_num) / fee_denom;
 
         // Record swap history
         let history_count: u32 = env.storage().instance().get(&DataKey::SwapHistoryCount).unwrap_or(0);
+        let token_out = if token_in == symbol_short!("bst") { symbol_short!("xlm") } else { symbol_short!("bst") };
         let record = SwapRecord {
             timestamp: env.ledger().timestamp(),
             user: user.clone(),
             token_in,
             amount_in,
-            token_out: if token_in == symbol_short!("bst") { symbol_short!("xlm") } else { symbol_short!("bst") },
+            token_out,
             amount_out,
             fee,
         };
@@ -411,16 +412,26 @@ impl LiquidityPoolContract {
         (amount_a * reserve_b) / reserve_a
     }
 
-    fn sqrt(x: i128) -> i128 {
+    pub fn sqrt(x: i128) -> i128 {
         if x == 0 || x == 1 {
             return x;
         }
+
+        // Ensure x doesn't exceed i128::MAX / 2 to prevent overflow in intermediate calculations
+        assert!(x <= i128::MAX / 2, "Input value too large for sqrt calculation");
+
         let mut z = (x + 1) / 2;
         let mut y = x;
+
         while z < y {
             y = z;
-            z = (x / z + z) / 2;
+
+            // Use checked operations to detect overflow
+            let x_div_z = x / z;
+            let sum = x_div_z.checked_add(z).expect("Overflow in sqrt calculation: sum exceeded i128::MAX");
+            z = sum / 2;
         }
+
         y
     }
 }

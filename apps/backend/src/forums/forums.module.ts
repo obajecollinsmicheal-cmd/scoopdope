@@ -5,13 +5,14 @@ import { ForumsController } from './forums.controller';
 import { ForumsService } from './forums.service';
 import { Post } from './post.entity';
 import { Reply } from './reply.entity';
+import { ForumVote } from './forum-vote.entity';
 import { ModerationModule } from '../moderation/moderation.module';
 import { SearchModule } from '../search/search.module';
 import { StreaksModule } from '../streaks/streaks.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Course, Post, Reply]),
+    TypeOrmModule.forFeature([Course, Post, Reply, ForumVote]),
     ModerationModule,
     SearchModule,
     StreaksModule,

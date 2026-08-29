@@ -1,17 +1,34 @@
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { config } from 'dotenv';
+import { DatabaseConfigParser } from './common/utils/database-config';
 
 config();
 
-const isProduction = process.env.NODE_ENV === 'production';
+const nodeEnv = process.env.NODE_ENV || 'development';
+const isProduction = nodeEnv === 'production';
+const isStaging = nodeEnv === 'staging';
+
+// Ensure synchronize is always false for migrations (safety first)
+const synchronize = false;
+
+// Validate synchronize setting for safety
+if ((isProduction || isStaging) && synchronize) {
+  throw new Error(
+    `CRITICAL: TypeORM synchronize is enabled in ${nodeEnv} environment. ` +
+    `This can cause data loss. Synchronize must be disabled in production and staging.`
+  );
+}
+
+// Parse database configuration (supports both DATABASE_URL and individual env vars)
+const dbConfig = DatabaseConfigParser.parse();
 
 export const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
-  host: process.env.DATABASE_HOST || 'localhost',
-  port: parseInt(process.env.DATABASE_PORT || '5432', 10),
-  username: process.env.DATABASE_USER,
-  password: process.env.DATABASE_PASSWORD,
-  database: process.env.DATABASE_NAME || 'scoopdope',
+  host: dbConfig.host,
+  port: dbConfig.port,
+  username: dbConfig.username,
+  password: dbConfig.password,
+  database: dbConfig.name,
   entities: isProduction
     ? ['dist/**/*.entity.js']
     : ['src/**/*.entity.ts'],
@@ -28,7 +45,7 @@ export const dataSourceOptions: DataSourceOptions = {
     max: parseInt(process.env.DB_POOL_SIZE || '10', 10),
     idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || '10000', 10),
   },
-  synchronize: false,
+  synchronize,
 };
 
 export const AppDataSource = new DataSource(dataSourceOptions);

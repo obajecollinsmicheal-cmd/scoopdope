@@ -53,9 +53,33 @@ export class WebhooksService implements OnModuleInit {
     const wh = await this.webhookRepo.findOne({ where: { id, userId } });
     if (!wh) throw new NotFoundException('Webhook not found');
     if (data.url) wh.url = data.url;
-    if (data.events) wh.events = Array.isArray(data.events) ? (data.events as any).join(',') : data.events;
+    if (data.events) wh.events = Array.isArray(data.events) ? data.events.join(',') : data.events;
     if (data.isActive !== undefined) wh.isActive = data.isActive;
     return this.webhookRepo.save(wh);
+  }
+
+  // --- Delivery queue (concurrency-limited) ---
+
+  private readonly deliveryQueue: Array<{ wh: Webhook; delivery: WebhookDelivery }> = [];
+  private draining = false;
+  private readonly MAX_CONCURRENT = 5;
+
+  private enqueue(wh: Webhook, delivery: WebhookDelivery): void {
+    this.deliveryQueue.push({ wh, delivery });
+    if (!this.draining) {
+      this.draining = true;
+      this.drainQueue();
+    }
+  }
+
+  private async drainQueue(): Promise<void> {
+    while (this.deliveryQueue.length > 0) {
+      const batch = this.deliveryQueue.splice(0, this.MAX_CONCURRENT);
+      await Promise.allSettled(
+        batch.map(({ wh, delivery }) => this.deliver(wh, delivery))
+      );
+    }
+    this.draining = false;
   }
 
   // --- Event publishing ---
@@ -74,7 +98,7 @@ export class WebhooksService implements OnModuleInit {
         payload: JSON.stringify(payload),
       });
       const saved = await this.deliveryRepo.save(delivery);
-      setImmediate(() => this.deliver(wh, saved));
+      this.enqueue(wh, saved);
     }
   }
 
@@ -88,7 +112,15 @@ export class WebhooksService implements OnModuleInit {
     }
 
     const expected = this.sign(secret, body);
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+
+    // crypto.timingSafeEqual throws if the two buffers have different lengths,
+    // which would itself leak length information. Guard with an explicit length
+    // check first; both buffers must be the same size before we compare bytes.
+    const expectedBuf = Buffer.from(expected);
+    const signatureBuf = Buffer.from(signature);
+    if (expectedBuf.length !== signatureBuf.length) return false;
+
+    return crypto.timingSafeEqual(expectedBuf, signatureBuf);
   }
 
   private async deliver(wh: Webhook, delivery: WebhookDelivery): Promise<void> {
@@ -108,8 +140,8 @@ export class WebhooksService implements OnModuleInit {
         delivery.nextRetryAt = new Date(Date.now() + delay * 1000);
         delivery.status = DeliveryStatus.PENDING;
       }
-    } catch (err: any) {
-      delivery.responseBody = err.message;
+    } catch (err: unknown) {
+      delivery.responseBody = err instanceof Error ? err.message : 'Unknown error';
       delivery.status = DeliveryStatus.FAILED;
       if (delivery.attempts < MAX_ATTEMPTS) {
         const delay = RETRY_DELAYS[delivery.attempts - 1] ?? 7200;
@@ -183,14 +215,14 @@ export class WebhooksService implements OnModuleInit {
   // --- Event listeners ---
 
   @OnEvent('enrollment.created')
-  onEnrollment(payload: any) { this.publish('enrollment.created', payload); }
+  onEnrollment(payload: Record<string, unknown>) { this.publish('enrollment.created', payload); }
 
   @OnEvent('enrollment.completed')
-  onCompletion(payload: any) { this.publish('enrollment.completed', payload); }
+  onCompletion(payload: Record<string, unknown>) { this.publish('enrollment.completed', payload); }
 
   @OnEvent('credential.issued')
-  onCredential(payload: any) { this.publish('credential.issued', payload); }
+  onCredential(payload: Record<string, unknown>) { this.publish('credential.issued', payload); }
 
   @OnEvent('token.rewarded')
-  onTokenRewarded(payload: any) { this.publish('token.rewarded', payload); }
+  onTokenRewarded(payload: Record<string, unknown>) { this.publish('token.rewarded', payload); }
 }

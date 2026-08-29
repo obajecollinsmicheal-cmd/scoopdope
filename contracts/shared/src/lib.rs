@@ -45,6 +45,7 @@ pub enum DataKey {
     WasmHistory,                         // Vec<BytesN<32>>
     CurrentVersion,                      // u32
     MigratedVersion,                     // u32
+    Version,                             // String semver
 }
 
 #[contract]
@@ -65,7 +66,7 @@ fn role_has_permission(role: &Role, permission: &Permission) -> bool {
 #[contractimpl]
 impl SharedContract {
     /// Initialize the contract with an admin address
-    pub fn initialize(env: Env, admin: Address, governance: Address) {
+    pub fn initialize(env: Env, admin: Address, governance: Address, version: String) {
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Governance, &governance);
@@ -74,6 +75,7 @@ impl SharedContract {
             .set(&DataKey::Role(admin.clone()), &Role::Admin);
         env.storage().instance().set(&DataKey::CurrentVersion, &1_u32);
         env.storage().instance().set(&DataKey::MigratedVersion, &1_u32);
+        env.storage().instance().set(&DataKey::Version, &version);
     }
 
     /// Set the governance address (admin only)
@@ -144,9 +146,14 @@ impl SharedContract {
         env.storage().instance().set(&DataKey::MigratedVersion, &current_version);
     }
 
-    /// Get current version
+    /// Get current numeric version
     pub fn get_version(env: Env) -> u32 {
         env.storage().instance().get(&DataKey::CurrentVersion).unwrap_or(1)
+    }
+
+    /// Get contract semver string set during initialization
+    pub fn version(env: Env) -> String {
+        env.storage().instance().get(&DataKey::Version).unwrap_or_else(|| String::from_str(&env, "unknown"))
     }
 
     /// Assign a role to an address (admin only). Emits ("rbac", "role_assigned").

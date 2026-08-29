@@ -33,9 +33,9 @@ function CompareView({ courses, onClose }: { courses: ComparableCourse[]; onClos
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left p-4 text-gray-500 dark:text-gray-400 font-medium w-28">Attribute</th>
+                <th scope="col" className="text-left p-4 text-gray-500 dark:text-gray-400 font-medium w-28">Attribute</th>
                 {courses.map((c) => (
-                  <th key={c.id} className="p-4 text-left">
+                  <th scope="col" key={c.id} className="p-4 text-left">
                     <p className="font-semibold text-gray-900 dark:text-white">{c.title}</p>
                     {c.description && (
                       <p className="text-xs text-gray-500 dark:text-gray-400 font-normal mt-1 line-clamp-2">{c.description}</p>
@@ -47,7 +47,7 @@ function CompareView({ courses, onClose }: { courses: ComparableCourse[]; onClos
             <tbody>
               {rows.map(({ label, key, format }) => (
                 <tr key={key} className={`border-b border-gray-100 dark:border-gray-800 ${differs(key) ? 'bg-yellow-50 dark:bg-yellow-900/10' : ''}`}>
-                  <td className="p-4 text-gray-500 dark:text-gray-400 font-medium">{label}</td>
+                  <th scope="row" className="p-4 text-gray-500 dark:text-gray-400 font-medium text-left">{label}</th>
                   {courses.map((c) => (
                     <td key={c.id} className="p-4 text-gray-900 dark:text-gray-100">
                       {format ? format(c[key]) : (c[key] as string) ?? '—'}

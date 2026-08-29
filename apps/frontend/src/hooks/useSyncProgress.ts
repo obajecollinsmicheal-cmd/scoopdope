@@ -30,8 +30,6 @@ export function useSyncProgress() {
     const pending = getPending();
     if (pending.length === 0) return;
 
-    console.log(`Syncing ${pending.length} progress updates...`);
-    
     const remaining: PendingProgress[] = [];
     
     for (const update of pending) {

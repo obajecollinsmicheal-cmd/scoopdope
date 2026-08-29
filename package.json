@@ -13,9 +13,11 @@
     "dev:backend": "npm run start:dev --workspace=apps/backend",
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
+    "test:integration": "bash scripts/test-integration.sh",
     "test:load": "./scripts/load-test.sh",
     "test:mutation": "stryker run",
     "test:mutation:report": "stryker run --reporters html",
+    "type-check": "npm run type-check --workspace=apps/backend && npm run typecheck --workspace=packages/types",
     "prepare": "husky install"
   },
   "engines": {

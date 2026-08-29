@@ -4,6 +4,34 @@ import { reviewsApi, Review, SortCriterion } from '@/lib/reviewsApi';
 import { StarRating } from './StarRating';
 import { InstructorReply } from './InstructorReply';
 
+function FlagButton({ courseId, reviewId }: { courseId: string; reviewId: string }) {
+  const [flagged, setFlagged] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function handleFlag() {
+    if (flagged) return;
+    setLoading(true);
+    try {
+      await reviewsApi.flagReview(courseId, reviewId);
+      setFlagged(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={handleFlag}
+      disabled={loading || flagged}
+      className={`text-xs ${flagged ? 'text-red-500 cursor-default' : 'text-gray-400 hover:text-red-500'} transition-colors`}
+      aria-label={flagged ? 'Review flagged' : 'Flag review as inappropriate'}
+      title={flagged ? 'Flagged as inappropriate' : 'Flag as inappropriate'}
+    >
+      {flagged ? '⚑ Flagged' : '⚐ Flag'}
+    </button>
+  );
+}
+
 interface ReviewListProps {
   courseId: string;
   currentUserId?: string;
@@ -80,12 +108,15 @@ export function ReviewList({ courseId, currentUserId, isInstructor = false }: Re
               </div>
               <StarRating value={review.rating} readOnly />
               <p className="mt-2 text-sm text-gray-700">{review.text}</p>
-              <InstructorReply
-                courseId={courseId}
-                reviewId={review.id}
-                existingReply={review.instructorReply}
-                isInstructor={isInstructor}
-              />
+              <div className="flex items-center justify-between mt-2">
+                <InstructorReply
+                  courseId={courseId}
+                  reviewId={review.id}
+                  existingReply={review.instructorReply}
+                  isInstructor={isInstructor}
+                />
+                <FlagButton courseId={courseId} reviewId={review.id} />
+              </div>
             </li>
           ))}
         </ul>

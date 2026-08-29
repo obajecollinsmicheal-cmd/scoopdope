@@ -1,5 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
-import { UsersController } from './users.controller';
+import { UsersController, AdminUsersController } from './users.controller';
 
 describe('UsersController', () => {
   const mockService = {
@@ -39,5 +39,144 @@ describe('UsersController', () => {
     await expect(controller.update('1', { username: 'X' }, { user: { id: '2' } })).rejects.toThrow(
       ForbiddenException
     );
+  });
+});
+
+describe('AdminUsersController', () => {
+  const mockUsersService = {
+    findAll: jest.fn(),
+    changeRole: jest.fn(),
+    banUser: jest.fn(),
+    softDelete: jest.fn(),
+    bulkSoftDelete: jest.fn(),
+  };
+  const mockAuditService = {
+    log: jest.fn(),
+  };
+  let adminController: AdminUsersController;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    adminController = new AdminUsersController(
+      mockUsersService as any,
+      mockAuditService as any,
+    );
+  });
+
+  describe('deleteUser', () => {
+    it('should soft delete a single user and write audit log', async () => {
+      const deleted = { id: '1', email: 'test@example.com', deletedAt: new Date() };
+      mockUsersService.softDelete.mockResolvedValue(deleted);
+
+      const req = {
+        user: { id: 'admin-id' },
+        ip: '127.0.0.1',
+        headers: { 'user-agent': 'test-agent' },
+      };
+
+      const result = await adminController.deleteUser('1', req as any);
+
+      expect(result).toEqual(deleted);
+      expect(mockUsersService.softDelete).toHaveBeenCalledWith('1');
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        'admin.user_deleted',
+        'admin-id',
+        true,
+        { affectedId: '1' },
+        '127.0.0.1',
+        'test-agent',
+      );
+    });
+  });
+
+  describe('bulkDeleteUsers', () => {
+    it('should bulk soft delete users and write per-user + summary audit logs', async () => {
+      const dto = { ids: ['uuid-1', 'uuid-2', 'uuid-3'] };
+      const results = {
+        deleted: ['uuid-1', 'uuid-2'],
+        failed: [{ id: 'uuid-3', reason: 'User not found' }],
+      };
+      mockUsersService.bulkSoftDelete.mockResolvedValue(results);
+
+      const req = {
+        user: { id: 'admin-id' },
+        ip: '127.0.0.1',
+        headers: { 'user-agent': 'test-agent' },
+      };
+
+      const response = await adminController.bulkDeleteUsers(dto, req as any);
+
+      expect(mockUsersService.bulkSoftDelete).toHaveBeenCalledWith(dto.ids);
+
+      // Per-user audit entries for each deleted user
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        'admin.user_deleted',
+        'admin-id',
+        true,
+        { affectedId: 'uuid-1', operation: 'bulk' },
+        '127.0.0.1',
+        'test-agent',
+      );
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        'admin.user_deleted',
+        'admin-id',
+        true,
+        { affectedId: 'uuid-2', operation: 'bulk' },
+        '127.0.0.1',
+        'test-agent',
+      );
+
+      // Summary audit entry
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        'admin.user_bulk_deleted',
+        'admin-id',
+        true,
+        {
+          affectedIds: ['uuid-1', 'uuid-2'],
+          failedIds: ['uuid-3'],
+          totalRequested: 3,
+        },
+        '127.0.0.1',
+        'test-agent',
+      );
+
+      expect(mockAuditService.log).toHaveBeenCalledTimes(3);
+
+      expect(response).toEqual({
+        message: 'Bulk deletion completed: 2 deleted, 1 failed',
+        results,
+      });
+    });
+
+    it('should handle empty failed list', async () => {
+      const dto = { ids: ['uuid-1', 'uuid-2'] };
+      const results = {
+        deleted: ['uuid-1', 'uuid-2'],
+        failed: [],
+      };
+      mockUsersService.bulkSoftDelete.mockResolvedValue(results);
+
+      const req = {
+        user: { id: 'admin-id' },
+        ip: '127.0.0.1',
+        headers: {},
+      };
+
+      const response = await adminController.bulkDeleteUsers(dto, req as any);
+
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        'admin.user_bulk_deleted',
+        'admin-id',
+        true,
+        {
+          affectedIds: ['uuid-1', 'uuid-2'],
+          failedIds: [],
+          totalRequested: 2,
+        },
+        '127.0.0.1',
+        undefined,
+      );
+      expect(response.message).toBe('Bulk deletion completed: 2 deleted, 0 failed');
+    });
   });
 });

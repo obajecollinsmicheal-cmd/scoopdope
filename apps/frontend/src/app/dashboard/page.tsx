@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import api from '@/lib/api';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { CircularProgress } from '@/components/ui/CircularProgress';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { StreakWidget } from '@/components/ui/StreakWidget';
+import { TokenBalanceWidget } from '@/components/dashboard/TokenBalanceWidget';
 import { CheckCircle2 } from 'lucide-react';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import { useOnboardingStore } from '@/store/onboarding.store';
@@ -36,12 +39,6 @@ interface CourseData {
   title: string;
 }
 
-function SkeletonItem({ width = 'w-full', height = 'h-6' }: { width?: string; height?: string }) {
-  return (
-    <div className={`bg-gray-200 dark:bg-gray-700 rounded ${width} ${height} animate-pulse`} />
-  );
-}
-
 export default function DashboardPage() {
   const { state } = useAuth();
   const [user, setUser] = useState<UserData | null>(
@@ -55,7 +52,6 @@ export default function DashboardPage() {
         }
       : null
   );
-  const [tokenBalance, setTokenBalance] = useState<number | null>(null);
   const [progress, setProgress] = useState<ProgressRecord[]>([]);
   const [courses, setCourses] = useState<Record<string, CourseData>>({});
   const [credentials, setCredentials] = useState<CredentialRecord[]>([]);
@@ -90,8 +86,7 @@ export default function DashboardPage() {
           throw new Error('User information is missing.');
         }
 
-        const [balanceRes, progressRes, credRes, bundlesRes, pathsRes, recsRes] = await Promise.all([
-          api.get(`/users/${currentUser.id}/token-balance`),
+        const [progressRes, credRes, bundlesRes, pathsRes, recsRes] = await Promise.all([
           api.get(`/users/${currentUser.id}/progress`),
           api.get(`/credentials/${currentUser.id}`),
           api.get('/bundles/user/me'),
@@ -99,7 +94,6 @@ export default function DashboardPage() {
           api.get('/v1/recommendations?limit=5').catch(() => ({ data: { data: [] } })),
         ]);
 
-        setTokenBalance(Number(balanceRes.data.balance ?? 0));
         setBundleEnrollments(bundlesRes.data ?? []);
         setPathEnrollments(pathsRes.data ?? []);
         setRecommendations(recsRes.data?.data ?? []);
@@ -171,8 +165,8 @@ export default function DashboardPage() {
         <section>
           {isLoading ? (
             <div className="space-y-2">
-              <SkeletonItem width="w-48" height="h-8" />
-              <SkeletonItem width="w-64" height="h-5" />
+              <Skeleton className="w-48 h-8" />
+              <Skeleton className="w-64 h-5" />
             </div>
           ) : (
             <div>
@@ -205,15 +199,7 @@ export default function DashboardPage() {
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
               BST Token Balance
             </h2>
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 h-[116px] flex items-center">
-              {isLoading ? (
-                <SkeletonItem width="w-32" height="h-7" />
-              ) : (
-                <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-                  {tokenBalance ?? 0} BST
-                </p>
-              )}
-            </div>
+            <TokenBalanceWidget stellarPublicKey={state.user?.stellarPublicKey} />
           </div>
         </section>
 
@@ -329,8 +315,8 @@ export default function DashboardPage() {
             {isLoading ? (
               Array.from({ length: 3 }).map((_, idx) => (
                 <div key={idx} className="space-y-2">
-                  <SkeletonItem width="w-2/5" height="h-5" />
-                  <div className="h-3 w-full rounded bg-gray-200 dark:bg-gray-700" />
+                  <Skeleton className="w-2/5 h-5" />
+                  <Skeleton className="w-full h-3" />
                 </div>
               ))
             ) : enrolledCourses.length === 0 ? (
@@ -369,7 +355,7 @@ export default function DashboardPage() {
           <div className="mt-3 space-y-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
             {isLoading ? (
               Array.from({ length: 3 }).map((_, idx) => (
-                <SkeletonItem key={idx} width="w-full" height="h-6" />
+                <Skeleton key={idx} className="w-full h-6" />
               ))
             ) : recentCredentials.length === 0 ? (
               <p className="text-gray-500 dark:text-gray-400">

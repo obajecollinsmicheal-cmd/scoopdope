@@ -24,6 +24,7 @@ export class AccessLog {
   @Column()
   courseId: string;
 
+  // Why: access logs are security audit records; deleting a course removes its history (consider SET NULL to retain audit trail).
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;
@@ -31,6 +32,7 @@ export class AccessLog {
   @Column()
   userId: string;
 
+  // Why: security audit logs are removed with user account deletion (consider SET NULL to retain audit trail for compliance).
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;

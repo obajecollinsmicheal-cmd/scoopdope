@@ -9,6 +9,7 @@ export class PushSubscription {
   @Column()
   userId: string;
 
+  // Why: push subscriptions belong to a user; deleting the user removes their notification endpoints.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   user: User;
 

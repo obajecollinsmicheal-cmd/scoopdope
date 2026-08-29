@@ -1,6 +1,8 @@
 // Freighter wallet integration
 // Freighter exposes window.freighter (or @stellar/freighter-api package)
 
+import api from './api';
+
 declare global {
   interface Window {
     freighter?: {
@@ -39,6 +41,28 @@ export async function fetchXlmBalance(address: string): Promise<string> {
   const data = await res.json();
   const xlmBalance = data.balances?.find((b: { asset_type: string }) => b.asset_type === 'native');
   return xlmBalance ? xlmBalance.balance : '0';
+}
+
+/**
+ * Fetches the user's BST token balance from the backend.
+ *
+ * The backend calls the Stellar Token contract and returns the balance via
+ * GET /stellar/balance/:publicKey — which returns an array of balance objects.
+ * We find the entry with asset_code === 'BST' and return its balance string.
+ *
+ * Returns '0' when:
+ *  - the account has no BST trustline yet (new account)
+ *  - the account does not exist on-chain yet
+ *
+ * @throws on unexpected network/server errors so callers can show an error state
+ */
+export async function fetchBstBalance(publicKey: string): Promise<string> {
+  const { data } = await api.get<Array<{ asset_code?: string; asset_type: string; balance: string }>>(
+    `/stellar/balance/${publicKey}`,
+  );
+
+  const bstEntry = data.find((b) => b.asset_code === 'BST');
+  return bstEntry?.balance ?? '0';
 }
 
 export function truncateAddress(address: string): string {

@@ -73,6 +73,16 @@ export class ReviewsService {
     };
   }
 
+  async flagReview(courseId: string, reviewId: string) {
+    await this.ensureCourseExists(courseId);
+    const review = await this.reviewRepo.findOne({ where: { id: reviewId, courseId } });
+    if (!review) {
+      throw new NotFoundException('Review not found');
+    }
+    review.flagged = true;
+    return this.reviewRepo.save(review);
+  }
+
   private async ensureCourseExists(courseId: string) {
     const course = await this.courseRepo.findOne({
       where: { id: courseId, isDeleted: false },

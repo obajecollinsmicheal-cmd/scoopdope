@@ -174,7 +174,7 @@ export function Tour({ onComplete, onSkip, forceStart = false }: TourProps) {
           </h3>
           <button
             onClick={handleSkip}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="text-gray-600 hover:text-gray-800 text-xl leading-none"
             aria-label="Skip tour"
           >
             ×

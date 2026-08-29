@@ -23,6 +23,7 @@ export class DownloadItem {
   @Column()
   userId: string;
 
+  // Why: download records belong to a user; deleting the user removes their download history.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
@@ -30,6 +31,7 @@ export class DownloadItem {
   @Column()
   courseId: string;
 
+  // Why: if a course is deleted, the download records for it have no context and should be cleaned up.
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;

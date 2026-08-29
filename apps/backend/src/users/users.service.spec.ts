@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './user.entity';
 
@@ -57,5 +58,160 @@ describe('UsersService', () => {
     mockRepo.findOne.mockResolvedValue(null);
 
     await expect(service.update('1', { username: 'abc' })).rejects.toThrow('User not found');
+  });
+
+  it('update should block role escalation via profile update', async () => {
+    const existing = { id: '1', email: 'test@example.com', role: 'student' } as User;
+    const saved = { id: '1', email: 'test@example.com', role: 'student' } as User;
+
+    mockRepo.findOne.mockResolvedValue(existing);
+    mockRepo.save.mockResolvedValue(saved);
+
+    await service.update('1', { role: 'admin' } as any);
+
+    // The save call must NOT include role
+    const saveCall = mockRepo.save.mock.calls[0][0];
+    expect(saveCall.role).toBe('student');
+  });
+
+  it('update should block isBanned escalation via profile update', async () => {
+    const existing = { id: '1', email: 'test@example.com', isBanned: false } as User;
+    const saved = { id: '1', email: 'test@example.com', isBanned: false } as User;
+
+    mockRepo.findOne.mockResolvedValue(existing);
+    mockRepo.save.mockResolvedValue(saved);
+
+    await service.update('1', { isBanned: true } as any);
+
+    const saveCall = mockRepo.save.mock.calls[0][0];
+    expect(saveCall.isBanned).toBe(false);
+  });
+
+  it('update should block id modification via profile update', async () => {
+    const existing = { id: '1', email: 'test@example.com' } as User;
+    const saved = { id: '1', email: 'test@example.com' } as User;
+
+    mockRepo.findOne.mockResolvedValue(existing);
+    mockRepo.save.mockResolvedValue(saved);
+
+    await service.update('1', { id: '2' } as any);
+
+    const saveCall = mockRepo.save.mock.calls[0][0];
+    expect(saveCall.id).toBe('1');
+  });
+
+  it('update should block passwordHash via profile update', async () => {
+    const existing = { id: '1', email: 'test@example.com' } as User;
+    const saved = { id: '1', email: 'test@example.com' } as User;
+
+    mockRepo.findOne.mockResolvedValue(existing);
+    mockRepo.save.mockResolvedValue(saved);
+
+    await service.update('1', { passwordHash: 'hacked' } as any);
+
+    const saveCall = mockRepo.save.mock.calls[0][0];
+    expect(saveCall.passwordHash).toBeUndefined();
+  });
+
+  it('update should pick allowed fields while dropping disallowed ones', async () => {
+    const existing = {
+      id: '1',
+      email: 'test@example.com',
+      username: 'oldname',
+      role: 'student',
+    } as User;
+    const saved = {
+      id: '1',
+      email: 'test@example.com',
+      username: 'newname',
+      role: 'student',
+    } as User;
+
+    mockRepo.findOne.mockResolvedValue(existing);
+    mockRepo.save.mockResolvedValue(saved);
+
+    // Send both an allowed field (username) and disallowed field (role)
+    await service.update('1', { username: 'newname', role: 'admin' } as any);
+
+    const saveCall = mockRepo.save.mock.calls[0][0];
+    expect(saveCall.username).toBe('newname');
+    expect(saveCall.role).toBe('student');
+  });
+
+  describe('softDelete', () => {
+    it('should set deletedAt on an active user', async () => {
+      const user = { id: '1', email: 'test@example.com', deletedAt: null } as User;
+      const saved = { ...user, deletedAt: expect.any(Date) };
+      mockRepo.findOne.mockResolvedValue(user);
+      mockRepo.save.mockResolvedValue(saved);
+
+      await service.softDelete('1');
+
+      expect(mockRepo.save).toHaveBeenCalledWith({ ...user, deletedAt: expect.any(Date) });
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      mockRepo.findOne.mockResolvedValue(null);
+      await expect(service.softDelete('1')).rejects.toThrow('User not found');
+    });
+
+    it('should throw NotFoundException if user already deleted', async () => {
+      const user = { id: '1', email: 'test@example.com', deletedAt: new Date() } as User;
+      mockRepo.findOne.mockResolvedValue(user);
+      await expect(service.softDelete('1')).rejects.toThrow('User already deleted');
+    });
+  });
+
+  describe('bulkSoftDelete', () => {
+    it('should delete all valid users and collect failures', async () => {
+      const activeUser1 = { id: '1', email: 'a@example.com', deletedAt: null } as User;
+      const activeUser2 = { id: '2', email: 'b@example.com', deletedAt: null } as User;
+      const alreadyDeleted = { id: '3', email: 'c@example.com', deletedAt: new Date() } as User;
+
+      mockRepo.findOne
+        .mockResolvedValueOnce(activeUser1)
+        .mockResolvedValueOnce(activeUser2)
+        .mockResolvedValueOnce(alreadyDeleted);
+
+      mockRepo.save
+        .mockResolvedValueOnce({ ...activeUser1, deletedAt: new Date() })
+        .mockResolvedValueOnce({ ...activeUser2, deletedAt: new Date() });
+
+      const results = await service.bulkSoftDelete(['1', '2', '3']);
+
+      expect(results.deleted).toEqual(['1', '2']);
+      expect(results.failed).toEqual([
+        { id: '3', reason: 'User already deleted' },
+      ]);
+    });
+
+    it('should handle all failures gracefully', async () => {
+      mockRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+
+      const results = await service.bulkSoftDelete(['bad-1', 'bad-2']);
+
+      expect(results.deleted).toEqual([]);
+      expect(results.failed).toHaveLength(2);
+    });
+
+    it('should handle all successes', async () => {
+      const user1 = { id: '1', deletedAt: null } as User;
+      const user2 = { id: '2', deletedAt: null } as User;
+
+      mockRepo.findOne
+        .mockResolvedValueOnce(user1)
+        .mockResolvedValueOnce(user2);
+
+      mockRepo.save
+        .mockResolvedValueOnce({ ...user1, deletedAt: new Date() })
+        .mockResolvedValueOnce({ ...user2, deletedAt: new Date() });
+
+      const results = await service.bulkSoftDelete(['1', '2']);
+
+      expect(results.deleted).toEqual(['1', '2']);
+      expect(results.failed).toEqual([]);
+    });
   });
 });

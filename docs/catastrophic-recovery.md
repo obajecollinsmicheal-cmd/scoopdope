@@ -79,3 +79,139 @@ A calm, repeatable incident workflow reduces risk and speeds recovery.
 7. **Review**: conduct a post-incident analysis, document findings, and update processes.
 
 Document the responsible teams, escalation paths, and communication channels so everyone can act quickly when a catastrophic event occurs.
+
+## Contract Deployment Rollback
+
+Smart contract deployments are immutable once published on-chain, but failure scenarios require documented recovery paths.
+
+### Detecting a failed deployment
+
+A deployment failure occurs when:
+
+1. **Wasm upload fails**: `stellar contract build` or `stellar contract deploy` exits with a non-zero code.
+   - Check logs for: network timeouts, insufficient account balance, invalid credentials, or wasm compilation errors.
+
+2. **Transaction rejected**: the Stellar network rejects the deployment transaction.
+   - Signs: `TransactionResult::opERR_*, TransactionResult::txFAILED`, or timeout after 5 minutes without confirmation.
+
+3. **Contract fails to initialize**: the contract deploys but `initialize()` or setup calls fail.
+   - Check: on-chain event logs and contract state queries return errors or unexpected values.
+
+4. **Incorrect network deployed**: contract is published to testnet when mainnet was intended (or vice versa).
+   - Verify: `soroban_env` address and contract ID in env file match the expected network.
+
+### Pre-deployment checks
+
+Before rolling back, confirm the failure:
+
+```bash
+# 1. Verify the failed contract hash (testnet example)
+stellar network use testnet
+stellar contract info --id <CONTRACT_ID_THAT_FAILED>
+
+# Expected: contract not found, or state is inconsistent with intended values
+
+# 2. Confirm the previous working version's hash
+stellar contract info --id <PREVIOUS_CONTRACT_ID>
+
+# Expected: contract is on-chain and responding to queries
+
+# 3. Check account balance (must have funds for re-deployment)
+stellar account info <STELLAR_SECRET_KEY>
+
+# Expected: balance > 10 XLM (for wasm upload and deploy costs)
+```
+
+### Rollback procedure (re-deploy previous version)
+
+1. **Checkout the previous working commit**:
+   ```bash
+   git log --oneline contracts/analytics/
+   git checkout <PREVIOUS_COMMIT_HASH> -- contracts/analytics/
+   ```
+
+2. **Re-build the previous contract version**:
+   ```bash
+   cargo build --manifest-path contracts/analytics/Cargo.toml --target wasm32-unknown-unknown --release
+   ```
+
+3. **Deploy the previous version**:
+   ```bash
+   stellar contract deploy \
+     --wasm target/wasm32-unknown-unknown/release/scoopdope_analytics.wasm \
+     --source-account <STELLAR_SECRET_KEY> \
+     --network testnet
+   ```
+   - Output: `Contract deployed successfully. ID: <NEW_CONTRACT_ID>`
+
+4. **Verify the re-deployed contract**:
+   ```bash
+   stellar contract invoke \
+     --id <NEW_CONTRACT_ID> \
+     --source-account <STELLAR_SECRET_KEY> \
+     --network testnet \
+     -- initialize \
+     --admin <ADMIN_ADDRESS>
+   
+   # Expected: initialization succeeds or returns idempotent success
+   ```
+
+5. **Record the contract hash**:
+   ```bash
+   stellar contract info --id <NEW_CONTRACT_ID> | grep -i wasm_hash
+   # Output: wasm_hash: abc123def456...
+   ```
+
+### Updating backend configuration
+
+After re-deployment, update the backend environment variables to point to the new contract:
+
+1. **Update .env or deployment config**:
+   ```bash
+   # .env or infra/docker-compose.prod.yml
+   CONTRACT_ID_ANALYTICS=<NEW_CONTRACT_ID>
+   CONTRACT_ID_TOKEN=<NEW_CONTRACT_ID>  # if token contract was also redeployed
+   ```
+
+2. **Verify the backend can connect**:
+   ```bash
+   # Restart backend and check logs
+   docker compose up -d --build backend
+   docker compose logs -f backend | grep -i contract
+   
+   # Expected: "Contract ID resolved successfully" or similar success message
+   ```
+
+3. **Test end-to-end**:
+   ```bash
+   # Call a backend endpoint that interacts with the contract
+   curl -X GET http://localhost:3000/api/v1/stellar/balance/<PUBLIC_KEY>
+   
+   # Expected: HTTP 200 with balance data, not contract errors
+   ```
+
+### When to preserve the failed deployment
+
+In some cases, **do not roll back**:
+
+- **Partial failure**: only initialization failed, but the contract is on-chain and queryable. Retry initialization instead of re-deploying.
+- **Data loss risk**: if the failed contract recorded important state (e.g., user progress), re-deploying will reset that state. Consult business stakeholders before proceeding.
+- **Regulatory hold**: if the contract is under audit or investigation, freezing it may be required.
+
+### Communicating the rollback
+
+1. **Alert stakeholders immediately**: notify the platform team, customer support, and users.
+2. **Status page update**: mark the Stellar integration as "degraded" until re-deployment is complete.
+3. **Post-mortem**: document the failure cause and preventive measures (e.g., better pre-deployment testing, account balance alerts).
+
+### Prevention: pre-deployment checklist
+
+To reduce rollback frequency:
+
+- [ ] Test the contract on testnet at least 24 hours before mainnet deployment.
+- [ ] Verify the deployment account has > 50 XLM balance.
+- [ ] Confirm the network parameter matches the target (testnet vs. mainnet).
+- [ ] Run `stellar contract build --target wasm32-unknown-unknown` without errors.
+- [ ] Verify the contract hash with a previous successful deployment to catch bytecode regressions.
+- [ ] Have a mainnet rollback plan documented and tested on testnet.
+- [ ] Set up alerts for failed contract operations (initialize, update, etc.).

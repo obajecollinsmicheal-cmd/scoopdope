@@ -18,6 +18,8 @@ pub enum DataKey {
     NextProposalId,                      // u64 counter
     UpgradeProposal(u64),                // id → UpgradeProposalRecord
     TimelockExpiry(u64),                 // upgrade_id → expiry_ledger
+    TimelockLedgers,                     // u32 default timelock duration in ledgers
+    QuorumBps,                           // u32 quorum in basis points (e.g. 1000 = 10%)
 }
 
 // =============================================================================
@@ -78,21 +80,40 @@ impl GovernanceContract {
     // Admin
     // -------------------------------------------------------------------------
 
-    pub fn initialize(env: Env, admin: Address, token_contract: Address) {
+    pub fn initialize(env: Env, admin: Address, token_contract: Address, timelock_ledgers: u32, quorum_bps: u32) {
         assert!(
             !env.storage().instance().has(&DataKey::Admin),
             "Already initialized"
         );
+        assert!(timelock_ledgers > 0, "Timelock must be greater than 0");
+        assert!(quorum_bps > 0, "Quorum must be greater than 0");
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
             .set(&DataKey::TokenContract, &token_contract);
+        env.storage()
+            .instance()
+            .set(&DataKey::TimelockLedgers, &timelock_ledgers);
         env.storage().instance().set(&DataKey::NextProposalId, &1_u64);
+        env.storage()
+            .instance()
+            .set(&DataKey::QuorumBps, &quorum_bps);
     }
 
     pub fn get_admin(env: Env) -> Address {
         env.storage().instance().get(&DataKey::Admin).unwrap()
+    }
+
+    pub fn get_quorum_bps(env: Env) -> u32 {
+        env.storage().instance().get(&DataKey::QuorumBps).unwrap_or(1000)
+    }
+
+    pub fn get_timelock_ledgers(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::TimelockLedgers)
+            .unwrap_or(0)
     }
 
     // -------------------------------------------------------------------------
@@ -213,10 +234,34 @@ impl GovernanceContract {
         );
         assert!(!proposal.executed, "Already executed");
 
-        // Check quorum: votes_for > votes_against
         assert!(
             proposal.votes_for > proposal.votes_against,
             "Proposal did not pass"
+        );
+
+        let total_votes_cast = proposal.votes_for + proposal.votes_against;
+        let token_contract: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::TokenContract)
+            .unwrap();
+        let total_supply: i128 = env.invoke_contract(
+            &token_contract,
+            &symbol_short!("total_supply"),
+            soroban_sdk::vec![&env],
+        );
+        assert!(total_supply > 0, "Total supply is zero");
+
+        let quorum_bps: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuorumBps)
+            .unwrap_or(1000);
+
+        let quorum_threshold = total_votes_cast * 10000 / total_supply;
+        assert!(
+            quorum_threshold >= quorum_bps as i128,
+            "Insufficient quorum"
         );
 
         proposal.executed = true;
@@ -432,33 +477,35 @@ mod tests {
     use soroban_sdk::testutils::{Address as _, Ledger, LedgerInfo};
     use soroban_sdk::{symbol_short, Env};
 
-    fn setup() -> (Env, GovernanceContractClient<'static>, Address, Address) {
+    fn setup() -> (Env, GovernanceContractClient<'static>, Address, Address, Address) {
         let env = Env::default();
         env.mock_all_auths();
         let id = env.register_contract(None, GovernanceContract);
         let client = GovernanceContractClient::new(&env, &id);
         let admin = Address::generate(&env);
         let token = Address::generate(&env);
-        client.initialize(&admin, &token);
-        (env, client, admin, token)
+        let timelock_ledgers = 50u32;
+        let quorum_bps = 1000u32;
+        client.initialize(&admin, &token, &timelock_ledgers, &quorum_bps);
+        (env, client, admin, token, quorum_bps)
     }
 
     #[test]
     fn test_initialize_sets_admin() {
-        let (_, client, admin, _) = setup();
+        let (_, client, admin, _, _) = setup();
         assert_eq!(client.get_admin(), admin);
     }
 
     #[test]
     #[should_panic(expected = "Already initialized")]
     fn test_double_initialize_panics() {
-        let (_, client, admin, token) = setup();
-        client.initialize(&admin, &token);
+        let (_, client, admin, token, quorum_bps) = setup();
+        client.initialize(&admin, &token, &50u32, &quorum_bps);
     }
 
     #[test]
     fn test_create_proposal() {
-        let (env, client, _, _) = setup();
+        let (env, client, _, _, _) = setup();
         let proposer = Address::generate(&env);
         let title = String::from_str(&env, "New Course Category");
         let desc = String::from_str(&env, "Add blockchain category");
@@ -476,7 +523,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Voting end must be in future")]
     fn test_create_proposal_past_end_panics() {
-        let (env, client, _, _) = setup();
+        let (env, client, _, _, _) = setup();
         let proposer = Address::generate(&env);
         let title = String::from_str(&env, "Test");
         let desc = String::from_str(&env, "Test");
@@ -488,7 +535,7 @@ mod tests {
 
     #[test]
     fn test_create_proposal_increments_id() {
-        let (env, client, _, _) = setup();
+        let (env, client, _, _, _) = setup();
         let proposer = Address::generate(&env);
         let title = String::from_str(&env, "Test");
         let desc = String::from_str(&env, "Test");
@@ -503,7 +550,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Voting period ended")]
     fn test_vote_after_voting_end_panics() {
-        let (env, client, _, _) = setup();
+        let (env, client, _, _, _) = setup();
         let proposer = Address::generate(&env);
         let voter = Address::generate(&env);
         let title = String::from_str(&env, "Test");
@@ -529,7 +576,7 @@ mod tests {
 
     #[test]
     fn test_has_voted() {
-        let (env, client, _, _) = setup();
+        let (env, client, _, _, _) = setup();
         let proposer = Address::generate(&env);
         let voter = Address::generate(&env);
         let title = String::from_str(&env, "Test");
@@ -546,7 +593,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Voting still ongoing")]
     fn test_execute_before_voting_end_panics() {
-        let (env, client, _, _) = setup();
+        let (env, client, _, _, _) = setup();
         let proposer = Address::generate(&env);
         let title = String::from_str(&env, "Test");
         let desc = String::from_str(&env, "Test");
@@ -559,7 +606,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Proposal did not pass")]
     fn test_execute_without_quorum_panics() {
-        let (env, client, _, _) = setup();
+        let (env, client, _, _, _) = setup();
         let proposer = Address::generate(&env);
         let title = String::from_str(&env, "Test");
         let desc = String::from_str(&env, "Test");
@@ -584,7 +631,7 @@ mod tests {
 
     #[test]
     fn test_proposal_lifecycle() {
-        let (env, client, _, _) = setup();
+        let (env, client, _, _, _) = setup();
         let proposer = Address::generate(&env);
         let title = String::from_str(&env, "Test");
         let desc = String::from_str(&env, "Test");
@@ -610,5 +657,267 @@ mod tests {
         let prop = client.get_proposal(&id).unwrap();
         assert_eq!(prop.votes_for, 0);
         assert_eq!(prop.votes_against, 0);
+    }
+
+    // =========================================================================
+    // Timelock Tests (Issue #555)
+    // =========================================================================
+
+    #[test]
+    fn test_initialize_with_timelock() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let id = env.register_contract(None, GovernanceContract);
+        let client = GovernanceContractClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let token = Address::generate(&env);
+        let timelock_ledgers = 100u32;
+        let quorum_bps = 1000u32;
+
+        client.initialize(&admin, &token, &timelock_ledgers, &quorum_bps);
+        assert_eq!(client.get_timelock_ledgers(), timelock_ledgers);
+        assert_eq!(client.get_quorum_bps(), quorum_bps);
+    }
+
+    #[test]
+    #[should_panic(expected = "Timelock must be greater than 0")]
+    fn test_initialize_with_zero_timelock_panics() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let id = env.register_contract(None, GovernanceContract);
+        let client = GovernanceContractClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let token = Address::generate(&env);
+
+        client.initialize(&admin, &token, &0u32, &1000u32);
+    }
+
+    #[test]
+    #[should_panic(expected = "Timelock not expired")]
+    fn test_execute_upgrade_before_timelock_panics() {
+        let (env, client, _, _) = setup();
+        let proposer = Address::generate(&env);
+        let contract_addr = Address::generate(&env);
+        let wasm_hash = BytesN::from_array(&env, &[0u8; 32]);
+        let voting_end = env.ledger().sequence() + 10;
+        let timelock = voting_end + 50;
+
+        // Propose upgrade
+        let upgrade_id = client.propose_upgrade(
+            &proposer,
+            &contract_addr,
+            &wasm_hash,
+            &voting_end,
+            &timelock,
+        );
+
+        // Approve upgrade
+        env.ledger().set(LedgerInfo {
+            sequence_number: voting_end + 1,
+            timestamp: (voting_end + 1) as u64 * 5,
+            protocol_version: 21,
+            network_id: Default::default(),
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 100_000,
+        });
+        client.approve_upgrade(&upgrade_id);
+
+        // Try to execute before timelock expires (should panic)
+        client.execute_upgrade(&upgrade_id);
+    }
+
+    #[test]
+    fn test_execute_upgrade_at_timelock_threshold() {
+        let (env, client, _, _) = setup();
+        let proposer = Address::generate(&env);
+        let contract_addr = Address::generate(&env);
+        let wasm_hash = BytesN::from_array(&env, &[1u8; 32]);
+        let voting_end = env.ledger().sequence() + 10;
+        let timelock = voting_end + 50;
+
+        // Propose upgrade
+        let upgrade_id = client.propose_upgrade(
+            &proposer,
+            &contract_addr,
+            &wasm_hash,
+            &voting_end,
+            &timelock,
+        );
+
+        // Approve upgrade
+        env.ledger().set(LedgerInfo {
+            sequence_number: voting_end + 1,
+            timestamp: (voting_end + 1) as u64 * 5,
+            protocol_version: 21,
+            network_id: Default::default(),
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 100_000,
+        });
+        client.approve_upgrade(&upgrade_id);
+
+        // Advance to exactly the timelock threshold
+        env.ledger().set(LedgerInfo {
+            sequence_number: timelock,
+            timestamp: timelock as u64 * 5,
+            protocol_version: 21,
+            network_id: Default::default(),
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 100_000,
+        });
+
+        // Execute should succeed at threshold
+        client.execute_upgrade(&upgrade_id);
+
+        // Verify execution
+        let upgrade = client.get_upgrade_proposal(&upgrade_id).unwrap();
+        assert!(upgrade.executed);
+    }
+
+    #[test]
+    fn test_execute_upgrade_after_timelock_expires() {
+        let (env, client, _, _) = setup();
+        let proposer = Address::generate(&env);
+        let contract_addr = Address::generate(&env);
+        let wasm_hash = BytesN::from_array(&env, &[2u8; 32]);
+        let voting_end = env.ledger().sequence() + 10;
+        let timelock = voting_end + 50;
+
+        // Propose upgrade
+        let upgrade_id = client.propose_upgrade(
+            &proposer,
+            &contract_addr,
+            &wasm_hash,
+            &voting_end,
+            &timelock,
+        );
+
+        // Approve upgrade
+        env.ledger().set(LedgerInfo {
+            sequence_number: voting_end + 1,
+            timestamp: (voting_end + 1) as u64 * 5,
+            protocol_version: 21,
+            network_id: Default::default(),
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 100_000,
+        });
+        client.approve_upgrade(&upgrade_id);
+
+        // Advance well past the timelock
+        env.ledger().set(LedgerInfo {
+            sequence_number: timelock + 100,
+            timestamp: (timelock + 100) as u64 * 5,
+            protocol_version: 21,
+            network_id: Default::default(),
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 100_000,
+        });
+
+        // Execute should succeed well after timelock
+        client.execute_upgrade(&upgrade_id);
+
+        // Verify execution
+        let upgrade = client.get_upgrade_proposal(&upgrade_id).unwrap();
+        assert!(upgrade.executed);
+    }
+
+    #[test]
+    #[should_panic(expected = "Timelock must be after voting")]
+    fn test_propose_upgrade_with_timelock_before_voting_end_panics() {
+        let (env, client, _, _, _) = setup();
+        let proposer = Address::generate(&env);
+        let contract_addr = Address::generate(&env);
+        let wasm_hash = BytesN::from_array(&env, &[3u8; 32]);
+        let voting_end = env.ledger().sequence() + 50;
+        let invalid_timelock = voting_end - 10; // timelock before voting end
+
+        client.propose_upgrade(
+            &proposer,
+            &contract_addr,
+            &wasm_hash,
+            &voting_end,
+            &invalid_timelock,
+        );
+    }
+
+    // =========================================================================
+    // Mock Token Contract for Quorum Tests
+    // =========================================================================
+
+    #[contract]
+    pub struct MockTokenContract;
+
+    #[contractimpl]
+    impl MockTokenContract {
+        pub fn total_supply(env: Env) -> i128 {
+            1_000_000_000_000_000
+        }
+
+        pub fn balance(env: Env, _addr: Address) -> i128 {
+            0
+        }
+    }
+
+    #[test]
+    fn test_quorum_default_is_1000() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let id = env.register_contract(None, GovernanceContract);
+        let client = GovernanceContractClient::new(&env, &id);
+        let admin = Address::generate(&env);
+        let token = Address::generate(&env);
+        let quorum_bps = 500u32;
+
+        client.initialize(&admin, &token, &50u32, &quorum_bps);
+        assert_eq!(client.get_quorum_bps(), quorum_bps);
+    }
+
+    #[test]
+    #[should_panic(expected = "Insufficient quorum")]
+    fn test_execute_proposal_fails_with_insufficient_quorum() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let token_id = env.register_contract(None, MockTokenContract);
+        let gov_id = env.register_contract(None, GovernanceContract);
+        let client = GovernanceContractClient::new(&env, &gov_id);
+        let admin = Address::generate(&env);
+        let quorum_bps = 1000u32;
+        client.initialize(&admin, &token_id, &50u32, &quorum_bps);
+
+        let proposal = ProposalRecord {
+            id: 1,
+            proposer: admin.clone(),
+            title: String::from_str(&env, "Test"),
+            description: String::from_str(&env, "Test"),
+            voting_end_ledger: env.ledger().sequence(),
+            votes_for: 50,
+            votes_against: 0,
+            executed: false,
+            created_at: env.ledger().timestamp(),
+        };
+        env.storage().persistent().set(&DataKey::Proposal(1), &proposal);
+        env.storage().instance().set(&DataKey::NextProposalId, &2u64);
+
+        env.ledger().set(soroban_sdk::testutils::LedgerInfo {
+            sequence_number: env.ledger().sequence() + 1,
+            timestamp: (env.ledger().sequence() + 1) as u64 * 5,
+            protocol_version: 21,
+            network_id: Default::default(),
+            base_reserve: 10,
+            min_temp_entry_ttl: 1000,
+            min_persistent_entry_ttl: 1000,
+            max_entry_ttl: 100_000,
+        });
+
+        client.execute_proposal(&1);
     }
 }

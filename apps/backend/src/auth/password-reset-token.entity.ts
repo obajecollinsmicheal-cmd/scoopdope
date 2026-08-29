@@ -16,6 +16,7 @@ export class PasswordResetToken {
   @Column()
   tokenHash: string;
 
+  // Why: password reset tokens belong to a user; deleting the user invalidates its pending reset tokens.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;

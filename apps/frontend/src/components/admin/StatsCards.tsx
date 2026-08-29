@@ -5,8 +5,8 @@ import { adminApi, PlatformStats, ActivityEvent } from '@/lib/adminApi';
 function SkeletonCard() {
   return (
     <div className="animate-pulse border rounded-lg p-6 space-y-2">
-      <div className="h-4 bg-gray-200 rounded w-1/2" />
-      <div className="h-8 bg-gray-200 rounded w-3/4" />
+      <div className="h-4 bg-gray-204 rounded w-1/2" />
+      <div className="h-8 bg-gray-202 rounded w-3/4" />
     </div>
   );
 }
@@ -35,7 +35,7 @@ export function StatsCards() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <SkeletonCard /><SkeletonCard /><SkeletonCard />
       </div>
     );
@@ -43,7 +43,7 @@ export function StatsCards() {
 
   if (error || !stats) {
     return (
-      <div className="border border-red-200 rounded-lg p-6 text-center">
+      <div className="border border-blue-200 rounded-lg p-6 text-center">
         <p className="text-red-600 mb-3">Failed to load statistics.</p>
         <button className="text-blue-600 hover:underline text-sm" onClick={load}>Retry</button>
       </div>

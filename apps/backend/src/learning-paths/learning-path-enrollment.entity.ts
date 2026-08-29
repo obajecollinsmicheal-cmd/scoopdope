@@ -19,6 +19,7 @@ export class LearningPathEnrollment {
   @Column()
   userId: string;
 
+  // Why: enrollments belong to a user; deleting the user removes their enrollment records.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
@@ -26,6 +27,7 @@ export class LearningPathEnrollment {
   @Column()
   learningPathId: string;
 
+  // Why: if a learning path is deleted, its enrollment records are meaningless and should be removed.
   @ManyToOne(() => LearningPath, (lp) => lp.enrollments, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'learningPathId' })
   learningPath: LearningPath;

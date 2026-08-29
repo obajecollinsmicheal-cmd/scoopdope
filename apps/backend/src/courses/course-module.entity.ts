@@ -18,10 +18,12 @@ export class CourseModule {
   @Column()
   courseId: string;
 
+  // Why: deleting a course removes all its modules to prevent orphan content.
   @ManyToOne(() => Course, (course) => course.modules, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;
 
+  // Why: ORM-level cascade ensures lessons are persisted when module is added.
   @OneToMany(() => Lesson, (lesson) => lesson.module, { cascade: true })
   lessons: Lesson[];
 

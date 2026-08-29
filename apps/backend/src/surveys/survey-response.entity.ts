@@ -17,6 +17,7 @@ export class SurveyResponse {
   @Column()
   surveyId: string;
 
+  // Why: responses only exist in context of a survey; deleting the survey removes all its responses.
   @ManyToOne(() => Survey, (s) => s.responses, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'surveyId' })
   survey: Survey;
@@ -24,6 +25,7 @@ export class SurveyResponse {
   @Column()
   userId: string;
 
+  // Why: removes user survey submissions on account deletion; isAnonymous flag preserves aggregate intent.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;

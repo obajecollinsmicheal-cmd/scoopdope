@@ -12,37 +12,42 @@ import { Course } from '../courses/course.entity';
 @Entity('certificates')
 export class Certificate {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  userId: string;
+  userId!: string;
 
+  // Why: certificates belong to a user; deleting the user removes them (consider SET NULL to preserve on-chain Stellar records).
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
-  user: User;
+  user!: User;
 
   @Column()
-  courseId: string;
+  courseId!: string;
 
+  // Why: if a course is deleted, its issued certificates are removed (consider SET NULL to preserve verifiable credential history).
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
-  course: Course;
+  course!: Course;
 
   @Column()
-  certificateHash: string;
+  certificateHash!: string;
 
   @Column({ nullable: true })
-  ipfsHash: string;
+  ipfsHash!: string;
 
   @Column({ nullable: true })
-  stellarTransactionId: string;
+  stellarTransactionId!: string;
 
   @Column({ default: 'pending' })
-  status: 'pending' | 'minted' | 'verified';
+  status!: 'pending' | 'minted' | 'verified';
 
   @Column({ nullable: true })
-  pdfUrl: string;
+  pdfUrl!: string;
+
+  @Column({ nullable: true, type: 'timestamptz' })
+  revokedAt: Date | null;
 
   @CreateDateColumn()
-  issuedAt: Date;
+  issuedAt!: Date;
 }

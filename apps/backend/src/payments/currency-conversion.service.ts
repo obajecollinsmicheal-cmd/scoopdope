@@ -1,8 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ConfigService } from '@nestjs/config';
+import { Cache } from 'cache-manager';
 
 export const SUPPORTED_CURRENCIES = ['USD', 'EUR', 'GBP', 'NGN', 'KES', 'GHS', 'ZAR', 'INR', 'BRL', 'CAD', 'AUD'] as const;
 export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
+
+interface ExchangeRateResponse {
+  rates: Record<string, number>;
+  currencyNote?: string;
+}
 
 @Injectable()
 export class CurrencyConversionService {
@@ -10,15 +17,24 @@ export class CurrencyConversionService {
   private readonly apiKey: string;
   private ratesCache: { rates: Record<string, number>; fetchedAt: number } | null = null;
   private readonly cacheTtlMs = 60 * 60 * 1000; // 1 hour
+  private readonly cacheKey = 'exchange_rates';
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    @Optional() @Inject(CACHE_MANAGER) private readonly cacheManager?: Cache,
+  ) {
     this.apiKey = this.configService.get<string>('exchangeRate.apiKey') || '';
   }
 
   async getRates(base: SupportedCurrency = 'USD'): Promise<Record<string, number>> {
+    const { rates } = await this.getRatesWithMetadata(base);
+    return rates;
+  }
+
+  async getRatesWithMetadata(base: SupportedCurrency = 'USD'): Promise<ExchangeRateResponse> {
     const now = Date.now();
     if (this.ratesCache && now - this.ratesCache.fetchedAt < this.cacheTtlMs) {
-      return this.ratesCache.rates;
+      return { rates: this.ratesCache.rates };
     }
 
     try {
@@ -32,31 +48,68 @@ export class CurrencyConversionService {
       const rates: Record<string, number> = data.rates ?? data.conversion_rates;
 
       this.ratesCache = { rates, fetchedAt: now };
-      return rates;
+      await this.cacheManager?.set(this.cacheKey, { rates, fetchedAt: now }, this.cacheTtlMs / 1000);
+      return { rates };
     } catch (err) {
-      this.logger.error(`Failed to fetch exchange rates: ${err.message}`);
-      // Return cached rates if available, even if stale
-      if (this.ratesCache) return this.ratesCache.rates;
-      throw err;
+      this.logger.warn(`Failed to fetch exchange rates, falling back to cached values: ${err instanceof Error ? err.message : err}`);
+
+      const cached = await this.getCachedRates();
+      if (cached) {
+        this.ratesCache = cached;
+        return { rates: cached.rates };
+      }
+
+      return {
+        rates: {},
+        currencyNote: 'Live rates unavailable, showing USD',
+      };
     }
   }
 
   async convert(amountInUsd: number, targetCurrency: SupportedCurrency): Promise<number> {
-    if (targetCurrency === 'USD') return amountInUsd;
-    const rates = await this.getRates('USD');
+    return (await this.convertWithMetadata(amountInUsd, targetCurrency)).amount;
+  }
+
+  async convertWithMetadata(amountInUsd: number, targetCurrency: SupportedCurrency): Promise<{ amount: number; currencyNote?: string }> {
+    if (targetCurrency === 'USD') return { amount: amountInUsd };
+
+    const { rates, currencyNote } = await this.getRatesWithMetadata('USD');
+    if (currencyNote) {
+      return { amount: amountInUsd, currencyNote };
+    }
+
     const rate = rates[targetCurrency];
-    if (!rate) throw new Error(`Unsupported currency: ${targetCurrency}`);
-    return Math.round(amountInUsd * rate * 100) / 100;
+    if (!rate) {
+      throw new Error(`Unsupported currency: ${targetCurrency}`);
+    }
+
+    return { amount: Math.round(amountInUsd * rate * 100) / 100 };
   }
 
   /** Returns amount in smallest currency unit (e.g. cents) for Stripe */
   async toStripeAmount(amountInUsd: number, targetCurrency: SupportedCurrency): Promise<number> {
-    const converted = await this.convert(amountInUsd, targetCurrency);
+    const { amount } = await this.convertWithMetadata(amountInUsd, targetCurrency);
     // Zero-decimal currencies
     const zeroDecimal = ['KES', 'NGN', 'GHS'];
     return zeroDecimal.includes(targetCurrency)
-      ? Math.round(converted)
-      : Math.round(converted * 100);
+      ? Math.round(amount)
+      : Math.round(amount * 100);
+  }
+
+  private async getCachedRates(): Promise<{ rates: Record<string, number>; fetchedAt: number } | null> {
+    if (this.ratesCache) return this.ratesCache;
+    if (!this.cacheManager) return null;
+
+    try {
+      const cachedValue = await this.cacheManager.get<{ rates: Record<string, number>; fetchedAt: number }>(this.cacheKey);
+      if (cachedValue?.rates) {
+        return cachedValue;
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to read cached exchange rates: ${err instanceof Error ? err.message : err}`);
+    }
+
+    return null;
   }
 
   /** Detect currency from Accept-Language or locale header */

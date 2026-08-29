@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
+import { DistributedLockService } from '../common/distributed-lock.service';
 import { SecretRotation, SecretType } from './secret-rotation.entity';
 import { ApiKey } from '../auth/api-key.entity';
 import * as crypto from 'crypto';
@@ -15,19 +16,27 @@ export class SecretRotationService {
     @InjectRepository(SecretRotation) private rotationRepo: Repository<SecretRotation>,
     @InjectRepository(ApiKey) private apiKeyRepo: Repository<ApiKey>,
     private configService: ConfigService,
+    private readonly distributedLockService: DistributedLockService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async autoRotateExpiredApiKeys() {
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-    const oldKeys = await this.apiKeyRepo.find({
-      where: { isActive: true, createdAt: LessThan(ninetyDaysAgo) },
-    });
+    const lockKey = 'lock:cron:secrets:autoRotateExpiredApiKeys';
+    const result = await this.distributedLockService.withLock(lockKey, async () => {
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+      const oldKeys = await this.apiKeyRepo.find({
+        where: { isActive: true, createdAt: LessThan(ninetyDaysAgo) },
+      });
 
-    for (const key of oldKeys) {
-      await this.apiKeyRepo.update(key.id, { isActive: false });
-      await this.logRotation(SecretType.API_KEY, key.id, null, true);
-      this.logger.warn(`Auto-rotated API key ${key.id} (older than 90 days)`);
+      for (const key of oldKeys) {
+        await this.apiKeyRepo.update(key.id, { isActive: false });
+        await this.logRotation(SecretType.API_KEY, key.id, null, true);
+        this.logger.warn(`Auto-rotated API key ${key.id} (older than 90 days)`);
+      }
+    }, 60);
+
+    if (result === null) {
+      this.logger.debug('Skipping API key auto-rotation because another instance holds the lock');
     }
   }
 

@@ -19,6 +19,7 @@ export class Survey {
   @Column()
   courseId: string;
 
+  // Why: surveys are scoped to a course; deleting the course removes all associated surveys.
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;
@@ -41,6 +42,7 @@ export class Survey {
   @Column({ default: false })
   allowAnonymous: boolean;
 
+  // Why: ORM-level cascade so adding questions via the survey entity persists them automatically.
   @OneToMany(() => SurveyQuestion, (q) => q.survey, { cascade: true })
   questions: SurveyQuestion[];
 

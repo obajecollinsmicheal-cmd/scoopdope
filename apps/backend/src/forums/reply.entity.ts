@@ -17,6 +17,7 @@ export class Reply {
   @Column()
   postId: string;
 
+  // Why: replies are children of a post; deleting the post removes all its replies to prevent orphan content.
   @ManyToOne(() => Post, (post) => post.replies, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'postId' })
   post: Post;
@@ -24,6 +25,7 @@ export class Reply {
   @Column()
   userId: string;
 
+  // Why: removes a user's replies on account deletion; consider SET NULL to keep forum threads intact.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
@@ -33,6 +35,12 @@ export class Reply {
 
   @Column({ default: false })
   isAnswer: boolean;
+
+  @Column({ default: 0 })
+  upvotes: number;
+
+  @Column({ default: 0 })
+  downvotes: number;
 
   @CreateDateColumn()
   createdAt: Date;

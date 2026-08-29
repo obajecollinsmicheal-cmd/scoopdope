@@ -4,10 +4,25 @@ import { RefObject, useMemo } from 'react';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 
 /**
- * Attach Space/ArrowLeft/ArrowRight keyboard shortcuts to a <video> element.
- * Only active when the video container (or document) has focus and no input is focused.
+ * Keyboard shortcuts for the video player.
+ *
+ * Key      Action
+ * ───────────────────────────────────────────
+ * Space    Play / Pause
+ * ←        Seek back 10 s
+ * →        Seek forward 10 s
+ * ↑        Volume +10 %
+ * ↓        Volume −10 %
+ * M        Toggle mute
+ * F        Toggle fullscreen
+ *
+ * The `announce` callback is called with a short status string so the
+ * VideoPlayer can surface it in an aria-live region for screen readers.
  */
-export function useVideoShortcuts(videoRef: RefObject<HTMLVideoElement | null>) {
+export function useVideoShortcuts(
+  videoRef: RefObject<HTMLVideoElement | null>,
+  announce?: (msg: string) => void,
+) {
   const shortcuts = useMemo(() => [
     {
       key: ' ',
@@ -16,7 +31,13 @@ export function useVideoShortcuts(videoRef: RefObject<HTMLVideoElement | null>) 
         const v = videoRef.current;
         if (!v) return;
         e.preventDefault();
-        v.paused ? v.play() : v.pause();
+        if (v.paused) {
+          v.play();
+          announce?.('Playing');
+        } else {
+          v.pause();
+          announce?.('Paused');
+        }
       },
     },
     {
@@ -27,6 +48,7 @@ export function useVideoShortcuts(videoRef: RefObject<HTMLVideoElement | null>) 
         if (!v) return;
         e.preventDefault();
         v.currentTime = Math.max(0, v.currentTime - 10);
+        announce?.('Rewound 10 seconds');
       },
     },
     {
@@ -37,9 +59,59 @@ export function useVideoShortcuts(videoRef: RefObject<HTMLVideoElement | null>) 
         if (!v) return;
         e.preventDefault();
         v.currentTime = Math.min(v.duration, v.currentTime + 10);
+        announce?.('Skipped 10 seconds');
       },
     },
-  ], [videoRef]);
+    {
+      key: 'ArrowUp',
+      skipOnInput: true,
+      handler: (e: KeyboardEvent) => {
+        const v = videoRef.current;
+        if (!v) return;
+        e.preventDefault();
+        v.volume = Math.min(1, v.volume + 0.1);
+        announce?.(`Volume ${Math.round(v.volume * 100)}%`);
+      },
+    },
+    {
+      key: 'ArrowDown',
+      skipOnInput: true,
+      handler: (e: KeyboardEvent) => {
+        const v = videoRef.current;
+        if (!v) return;
+        e.preventDefault();
+        v.volume = Math.max(0, v.volume - 0.1);
+        announce?.(`Volume ${Math.round(v.volume * 100)}%`);
+      },
+    },
+    {
+      key: 'm',
+      skipOnInput: true,
+      handler: (e: KeyboardEvent) => {
+        const v = videoRef.current;
+        if (!v) return;
+        e.preventDefault();
+        v.muted = !v.muted;
+        announce?.(v.muted ? 'Muted' : 'Unmuted');
+      },
+    },
+    {
+      key: 'f',
+      skipOnInput: true,
+      handler: (e: KeyboardEvent) => {
+        const v = videoRef.current;
+        if (!v) return;
+        e.preventDefault();
+        if (!document.fullscreenElement) {
+          v.requestFullscreen().catch(() => {/* browser may deny outside user gesture */});
+          announce?.('Fullscreen');
+        } else {
+          document.exitFullscreen();
+          announce?.('Exited fullscreen');
+        }
+      },
+    },
+  ], [videoRef, announce]);
 
   useKeyboardShortcuts(shortcuts);
 }

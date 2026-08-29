@@ -16,6 +16,7 @@ export class RefreshToken {
   @Column()
   tokenHash: string;
 
+  // Why: refresh tokens belong to a user; deleting the user invalidates all their active sessions.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;

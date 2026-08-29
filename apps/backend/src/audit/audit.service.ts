@@ -4,6 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { LessThan, Repository } from 'typeorm';
 import { AuditLog, AuditAction } from './audit-log.entity';
 import { CustomLoggerService } from '../common/logger/logger.service';
+import { DistributedLockService } from '../common/distributed-lock.service';
 
 const RETENTION_DAYS = 90;
 
@@ -12,6 +13,7 @@ export class AuditService {
   constructor(
     @InjectRepository(AuditLog) private auditRepo: Repository<AuditLog>,
     private logger: CustomLoggerService,
+    private readonly distributedLockService: DistributedLockService,
   ) {
     this.logger.setContext('AuditService');
   }
@@ -50,9 +52,16 @@ export class AuditService {
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async purgeOldLogs(): Promise<void> {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
-    const { affected } = await this.auditRepo.delete({ createdAt: LessThan(cutoff) });
-    this.logger.info(`Audit retention: purged ${affected ?? 0} logs older than ${RETENTION_DAYS} days`);
+    const lockKey = 'lock:cron:audit:purgeOldLogs';
+    const result = await this.distributedLockService.withLock(lockKey, async () => {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
+      const { affected } = await this.auditRepo.delete({ createdAt: LessThan(cutoff) });
+      this.logger.info(`Audit retention: purged ${affected ?? 0} logs older than ${RETENTION_DAYS} days`);
+    }, 60);
+
+    if (result === null) {
+      this.logger.debug('Skipping audit retention purge because another instance holds the lock');
+    }
   }
 }

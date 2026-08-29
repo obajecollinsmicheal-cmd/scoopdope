@@ -15,6 +15,7 @@ export class SurveyQuestion {
   @Column()
   surveyId: string;
 
+  // Why: survey questions are part of a survey; deleting the survey removes its questions to prevent orphan content.
   @ManyToOne(() => Survey, (s) => s.questions, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'surveyId' })
   survey: Survey;

@@ -40,6 +40,13 @@ export class UserRateLimitGuard implements CanActivate {
     });
 
     if (!allowed) {
+      // Compute seconds until the rate-limit window resets and send it as
+      // Retry-After so clients can implement intelligent back-off.
+      const retryAfterSeconds = Math.ceil(
+        (status.resetTime.getTime() - Date.now()) / 1000,
+      );
+      response.set('Retry-After', String(Math.max(retryAfterSeconds, 1)));
+
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,

@@ -67,11 +67,11 @@ export function UserTable() {
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="border-b text-left text-gray-500">
-              <th className="py-2 pr-4">Name</th>
-              <th className="py-2 pr-4">Email</th>
-              <th className="py-2 pr-4">Role</th>
-              <th className="py-2 pr-4">Status</th>
-              <th className="py-2">Actions</th>
+              <th scope="col" className="py-2 pr-4">Name</th>
+              <th scope="col" className="py-2 pr-4">Email</th>
+              <th scope="col" className="py-2 pr-4">Role</th>
+              <th scope="col" className="py-2 pr-4">Status</th>
+              <th scope="col" className="py-2">Actions</th>
             </tr>
           </thead>
           <tbody>

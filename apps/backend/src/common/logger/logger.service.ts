@@ -13,8 +13,8 @@ export class CustomLoggerService implements LoggerService {
     this.context = context;
   }
 
-  log(message: any, context?: string): void {
-    this.logger.info(message, { context: context || this.context });
+  log(message: any, context?: string, meta?: any): void {
+    this.logger.info(message, { context: context || this.context, ...meta });
   }
 
   error(message: any, trace?: string, context?: string): void {
@@ -37,8 +37,8 @@ export class CustomLoggerService implements LoggerService {
   }
 
   // Additional Winston-specific methods
-  info(message: any, context?: string): void {
-    this.logger.info(message, { context: context || this.context });
+  info(message: any, context?: string, meta?: any): void {
+    this.logger.info(message, { context: context || this.context, ...meta });
   }
 
   // Create child logger with context

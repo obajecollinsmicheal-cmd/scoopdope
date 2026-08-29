@@ -17,6 +17,7 @@ export class Announcement {
   @Column()
   courseId: string;
 
+  // Why: announcements are scoped to a course; removing the course removes its announcements.
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;
@@ -24,6 +25,7 @@ export class Announcement {
   @Column()
   instructorId: string;
 
+  // Why: instructor deletion removes their announcements; consider SET NULL to preserve announcements for enrolled students.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'instructorId' })
   instructor: User;

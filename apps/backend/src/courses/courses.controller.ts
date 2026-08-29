@@ -8,6 +8,7 @@ import {
   Body,
   Query,
   UseGuards,
+  Header,
 } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import {
@@ -30,7 +31,14 @@ export class CoursesController {
   constructor(private coursesService: CoursesService) {}
 
   @Get()
+  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
   @ApiOperation({ summary: 'Get all published courses' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   @ApiQuery({
     name: 'search',
     required: false,
@@ -70,6 +78,11 @@ export class CoursesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a course by ID' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   @ApiResponse({
     status: 200,
     description: 'Returns a single course',
@@ -85,6 +98,10 @@ export class CoursesController {
   @Roles('admin', 'instructor')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new course' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   @ApiBody({
     schema: {
       example: {
@@ -110,6 +127,9 @@ export class CoursesController {
   @Roles('admin', 'instructor')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a course' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   @ApiBody({ schema: { example: { title: 'Updated title', description: 'Updated description' } } })
   @ApiResponse({
     status: 200,
@@ -128,6 +148,9 @@ export class CoursesController {
   @Roles('admin', 'instructor')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a course' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   @ApiResponse({
     status: 200,
     description: 'Course deleted successfully',
@@ -145,6 +168,11 @@ export class CoursesController {
   @Roles('admin', 'instructor')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Schedule a course for future publication' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   @ApiBody({ type: ScheduleCourseDto })
   @ApiResponse({ status: 200, description: 'Course scheduled' })
   @ApiResponse({ status: 400, description: 'scheduledAt must be in the future' })
@@ -158,6 +186,12 @@ export class CoursesController {
   @Roles('admin', 'instructor')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Immediately publish a course' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   @ApiResponse({ status: 200, description: 'Course published' })
   publishNow(@Param('id') id: string) {
     return this.coursesService.publishNow(id);

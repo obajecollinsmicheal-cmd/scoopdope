@@ -5,9 +5,10 @@ import { PayoutsController } from './payouts.controller';
 import { Payout } from './payout.entity';
 import { Enrollment } from '../enrollments/enrollment.entity';
 import { Course } from '../courses/course.entity';
+import { KycModule } from '../kyc/kyc.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Payout, Enrollment, Course])],
+  imports: [TypeOrmModule.forFeature([Payout, Enrollment, Course]), KycModule],
   providers: [PayoutsService],
   controllers: [PayoutsController],
   exports: [PayoutsService],

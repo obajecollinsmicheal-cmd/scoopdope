@@ -15,7 +15,7 @@ export class StellarIndexerService implements OnModuleInit, OnModuleDestroy {
   private readonly sorobanServer: SorobanRpc.Server;
   private readonly analyticsContractId: string;
   private readonly tokenContractId: string;
-  private readonly pollInterval: number;
+  private pollInterval: number;
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -30,7 +30,7 @@ export class StellarIndexerService implements OnModuleInit, OnModuleDestroy {
     );
     this.analyticsContractId = this.configService.get<string>('stellar.analyticsContractId') ?? '';
     this.tokenContractId = this.configService.get<string>('stellar.tokenContractId') ?? '';
-    this.pollInterval = this.configService.get<number>('stellar.indexerPollIntervalMs') ?? 5000;
+    this.pollInterval = this.configService.get<number>('stellar.indexerPollIntervalMs')!;
   }
 
   onModuleInit() {
@@ -43,7 +43,21 @@ export class StellarIndexerService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy() {
-    if (this.timer) clearInterval(this.timer);
+    this.clearTimer();
+  }
+
+  updatePollInterval(ms: number): void {
+    this.pollInterval = ms;
+    this.clearTimer();
+    this.timer = setInterval(() => this.poll(), this.pollInterval);
+    this.logger.log(`Indexer poll interval updated to ${ms}ms`);
+  }
+
+  private clearTimer() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
   }
 
   private async poll() {

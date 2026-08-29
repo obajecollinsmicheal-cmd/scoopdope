@@ -1,8 +1,9 @@
-import { IsOptional, IsString, IsBoolean, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
-export class AdminApiKeyQueryDto {
+export class AdminApiKeyQueryDto extends PaginationDto {
   @ApiPropertyOptional({ description: 'Filter by user ID' })
   @IsString()
   @IsOptional()
@@ -14,18 +15,4 @@ export class AdminApiKeyQueryDto {
   @Type(() => Boolean)
   isActive?: boolean;
 
-  @ApiPropertyOptional({ description: 'Page number', default: 1 })
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  @Type(() => Number)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ description: 'Items per page', default: 20 })
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  @IsOptional()
-  @Type(() => Number)
-  limit?: number = 20;
 }

@@ -16,6 +16,7 @@ export class QuizAttemptAnswer {
   @Column()
   attemptId: string;
 
+  // Why: answers belong to an attempt; deleting the attempt removes all its recorded answers.
   @ManyToOne(() => QuizAttempt, (a) => a.answers, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'attemptId' })
   attempt: QuizAttempt;
@@ -23,6 +24,7 @@ export class QuizAttemptAnswer {
   @Column()
   questionId: string;
 
+  // Why: if a question is deleted, the recorded answers to that question are meaningless.
   @ManyToOne(() => QuizQuestion, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'questionId' })
   question: QuizQuestion;

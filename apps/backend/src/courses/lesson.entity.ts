@@ -18,6 +18,7 @@ export class Lesson {
   @Column()
   moduleId: string;
 
+  // Why: deleting a module removes all its lessons to prevent orphan content.
   @ManyToOne(() => CourseModule, (m) => m.lessons, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'moduleId' })
   module: CourseModule;

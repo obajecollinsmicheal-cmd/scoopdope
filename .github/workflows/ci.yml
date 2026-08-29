@@ -21,7 +21,15 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Lint backend
@@ -38,6 +46,12 @@ jobs:
       - name: Run unit tests with coverage
         run: npx jest --coverage --passWithNoTests
         working-directory: apps/backend
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
 
       - name: Run Pact provider verification
         run: npm run test:pact --workspace=apps/backend
@@ -61,7 +75,15 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Run integration tests
@@ -107,7 +129,15 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Wait for PostgreSQL and Redis
@@ -162,7 +192,15 @@ jobs:
           curl -sSL https://github.com/stellar/stellar-cli/releases/download/v21.5.0/stellar-cli-21.5.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
           sudo mv stellar /usr/local/bin/
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Build contracts
@@ -189,7 +227,15 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Lint frontend
@@ -220,7 +266,15 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Build Storybook
@@ -237,6 +291,76 @@ jobs:
     name: Frontend - Accessibility Tests (WCAG 2.1 AA)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: Scoopdope_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build frontend
+        run: npm run build --workspace=apps/frontend
+
+      - name: Start frontend server
+        run: npm run start --workspace=apps/frontend &
+        timeout-minutes: 2
+
+      - name: Wait for frontend to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -f http://localhost:3000; then
+              echo "Frontend is ready"
+              exit 0
+            fi
+            echo "Waiting for frontend... ($i/30)"
+            sleep 2
+          done
+          echo "Frontend failed to start"
+          exit 1
+
+      - name: Run accessibility tests
+        run: npm run test:e2e -- e2e/accessibility.spec.ts
+        working-directory: apps/frontend
+        continue-on-error: false
+
+      - name: Upload accessibility test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accessibility-test-results
+          path: apps/frontend/test-results/
+          retention-days: 30
 
   percy-visual-tests:
     name: Frontend - Visual Regression Tests (Percy)
@@ -277,7 +401,15 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Install Playwright browsers
@@ -420,17 +552,37 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Generate frontend coverage
         run: npm run test:coverage --workspace=apps/frontend
         continue-on-error: true
 
+      - name: Upload frontend coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: apps/frontend/coverage/lcov.info
+
       - name: Generate backend coverage
         run: npm run test --workspace=apps/backend -- --coverage
         working-directory: apps/backend
         continue-on-error: true
+
+      - name: Upload backend coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: apps/backend/coverage/lcov.info
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
@@ -443,6 +595,29 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: Scoopdope_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -453,11 +628,57 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Build backend Docker image
         run: docker build -t scoopdope-backend:${{ github.sha }} -f apps/backend/Dockerfile .
+
+      - name: Smoke test backend container
+        run: |
+          docker run -d --name scoopdope-smoke --network host \
+            -e NODE_ENV=production \
+            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/Scoopdope_test \
+            -e REDIS_URL=redis://localhost:6379 \
+            -e JWT_SECRET=smoke-test-secret-key-min-length \
+            -e STELLAR_NETWORK=testnet \
+            -e STELLAR_SECRET_KEY=SBZVMB74Z7TTIWZNZ7CLBT6OJRZKMV4ZSM7CEGJR5ZJQSTQG5O6HBSY \
+            -e CORS_ORIGINS=http://localhost:3001 \
+            -e FRONTEND_URL=http://localhost:3001 \
+            -e EMAIL_ENABLED=false \
+            scoopdope-backend:${{ github.sha }}
+          for i in $(seq 1 15); do
+            STATUS=$(docker inspect -f '{{.State.Status}}' scoopdope-smoke 2>/dev/null)
+            if [ "$STATUS" = "running" ]; then
+              echo "Backend container is running (attempt $i)"
+              if curl -sf http://localhost:3000/health/live > /dev/null 2>&1; then
+                echo "Health endpoint reachable"
+                curl -s http://localhost:3000/health/live
+                docker stop scoopdope-smoke
+                docker rm scoopdope-smoke
+                exit 0
+              fi
+            elif [ "$STATUS" = "exited" ]; then
+              echo "Backend container exited during startup"
+              docker logs scoopdope-smoke 2>/dev/null || true
+              docker rm scoopdope-smoke 2>/dev/null || true
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "Backend container failed to start within timeout"
+          docker logs scoopdope-smoke 2>/dev/null || true
+          docker stop scoopdope-smoke 2>/dev/null || true
+          docker rm scoopdope-smoke 2>/dev/null || true
+          exit 1
 
       - name: Build frontend Docker image
         run: docker build -t scoopdope-frontend:${{ github.sha }} -f apps/frontend/Dockerfile .
@@ -551,7 +772,15 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Start backend server

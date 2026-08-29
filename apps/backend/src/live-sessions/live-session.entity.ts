@@ -24,6 +24,7 @@ export class LiveSession {
   @Column()
   cohortId: string;
 
+  // Why: live sessions are tied to a cohort; deleting the cohort removes its scheduled sessions.
   @ManyToOne(() => Cohort, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'cohortId' })
   cohort: Cohort;
@@ -31,6 +32,7 @@ export class LiveSession {
   @Column()
   instructorId: string;
 
+  // Why: instructor deletion removes scheduled sessions; consider SET NULL to preserve sessions for enrolled students.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'instructorId' })
   instructor: User;
@@ -46,6 +48,10 @@ export class LiveSession {
 
   @Column({ default: 60 })
   durationMinutes: number;
+
+  /** Maximum number of participants allowed in this session */
+  @Column({ default: 100 })
+  maxCapacity: number;
 
   /** Zoom or Google Meet URL */
   @Column({ nullable: true })

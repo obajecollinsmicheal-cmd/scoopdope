@@ -3,30 +3,34 @@ import { useState } from 'react';
 import { forumApi } from '@/lib/forumApi';
 
 interface VoteButtonProps {
-  type: 'thread' | 'reply';
+  type: 'post' | 'reply';
   id: string;
   initialUpvotes: number;
   initialDownvotes: number;
   initialUserVote?: 'up' | 'down' | null;
 }
 
-export function VoteButton({ type, id, initialUpvotes, initialDownvotes, initialUserVote = null }: VoteButtonProps) {
+export function VoteButton({
+  type,
+  id,
+  initialUpvotes,
+  initialDownvotes,
+  initialUserVote = null,
+}: VoteButtonProps) {
   const [upvotes, setUpvotes] = useState(initialUpvotes);
   const [downvotes, setDownvotes] = useState(initialDownvotes);
   const [userVote, setUserVote] = useState<'up' | 'down' | null>(initialUserVote);
   const [error, setError] = useState<string | null>(null);
 
   async function handleVote(direction: 'up' | 'down') {
-    const prevUpvotes = upvotes;
-    const prevDownvotes = downvotes;
-    const prevUserVote = userVote;
+    const prev = { upvotes, downvotes, userVote };
 
     // Optimistic update
+    const newDirection = userVote === direction ? null : direction;
     if (userVote === direction) {
-      // Toggle off
-      setUserVote(null);
       if (direction === 'up') setUpvotes((v) => v - 1);
       else setDownvotes((v) => v - 1);
+      setUserVote(null);
     } else {
       if (userVote === 'up') setUpvotes((v) => v - 1);
       if (userVote === 'down') setDownvotes((v) => v - 1);
@@ -37,13 +41,17 @@ export function VoteButton({ type, id, initialUpvotes, initialDownvotes, initial
 
     setError(null);
     try {
-      const apiDirection = userVote === direction ? 'remove' : direction;
-      await forumApi.vote(type, id, apiDirection);
+      const apiDirection = newDirection === null ? 'remove' : direction;
+      if (type === 'post') {
+        await forumApi.votePost(id, apiDirection);
+      } else {
+        await forumApi.voteReply(id, apiDirection);
+      }
     } catch {
       // Rollback
-      setUpvotes(prevUpvotes);
-      setDownvotes(prevDownvotes);
-      setUserVote(prevUserVote);
+      setUpvotes(prev.upvotes);
+      setDownvotes(prev.downvotes);
+      setUserVote(prev.userVote);
       setError('Vote failed. Please try again.');
     }
   }

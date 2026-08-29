@@ -47,7 +47,6 @@ export const handlers = [
       bio: '',
       createdAt: '2024-01-01T00:00:00.000Z',
       stellarPublicKey: 'GABC...',
-    }),
     })
   ),
 

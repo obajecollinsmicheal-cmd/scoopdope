@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+
+import { useId } from 'react';
 
 interface StarRatingProps {
   value: number;
@@ -8,8 +9,8 @@ interface StarRatingProps {
 }
 
 export function StarRating({ value, readOnly = false, onRatingChange }: StarRatingProps) {
-  const [hovered, setHovered] = useState(0);
-  const display = readOnly ? value : (hovered || value);
+  // Unique ID prefix to avoid collisions when multiple widgets appear on one page
+  const groupId = useId();
 
   if (readOnly) {
     return (
@@ -28,20 +29,47 @@ export function StarRating({ value, readOnly = false, onRatingChange }: StarRati
   }
 
   return (
-    <span className="flex gap-0.5" role="group" aria-label="Star rating">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          aria-label={`Rate ${star} out of 5`}
-          className={`text-2xl transition-colors ${star <= display ? 'text-yellow-400' : 'text-gray-300'} hover:text-yellow-400`}
-          onMouseEnter={() => setHovered(star)}
-          onMouseLeave={() => setHovered(0)}
-          onClick={() => onRatingChange?.(star)}
-        >
-          ★
-        </button>
-      ))}
-    </span>
+    <fieldset
+      className="flex gap-0.5"
+      role="radiogroup"
+      aria-label="Star rating"
+      // Remove the default fieldset border/padding
+      style={{ border: 'none', padding: 0, margin: 0 }}
+    >
+      {/* Screen-reader-only legend so assistive tech has a group label */}
+      <legend className="sr-only">Rate this course</legend>
+
+      {[1, 2, 3, 4, 5].map((star) => {
+        const inputId = `${groupId}-star-${star}`;
+        const checked = star === value;
+
+        return (
+          <label
+            key={star}
+            htmlFor={inputId}
+            className={`
+              text-2xl cursor-pointer transition-colors select-none
+              ${star <= value ? 'text-yellow-400' : 'text-gray-300'}
+              hover:text-yellow-400
+              has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 has-[:focus-visible]:rounded
+            `}
+            aria-label={`${star} out of 5 star${star !== 1 ? 's' : ''}`}
+          >
+            {/* Visually hidden radio input — keyboard / screen-reader accessible */}
+            <input
+              id={inputId}
+              type="radio"
+              name={`${groupId}-star-rating`}
+              value={star}
+              checked={checked}
+              onChange={() => onRatingChange?.(star)}
+              className="sr-only"
+              aria-label={`${star} star${star !== 1 ? 's' : ''}`}
+            />
+            ★
+          </label>
+        );
+      })}
+    </fieldset>
   );
 }

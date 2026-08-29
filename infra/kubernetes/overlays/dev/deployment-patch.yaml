@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scoopdope-backend
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: backend
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 10

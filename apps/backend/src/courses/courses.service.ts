@@ -144,12 +144,12 @@ export class CoursesService {
   async publishNow(id: string): Promise<Course> {
     const course = await this.findOne(id);
     const now = new Date();
-    return this.repo.save({
-      ...course,
-      status: CourseStatus.PUBLISHED,
-      isPublished: true,
-      publishedAt: now,
-      scheduledAt: course.scheduledAt ?? null,
-    });
+
+    course.status = CourseStatus.PUBLISHED;
+    course.isPublished = true;
+    course.publishedAt = now;
+    course.scheduledAt = course.scheduledAt ?? null;
+
+    return this.repo.save(course);
   }
 }

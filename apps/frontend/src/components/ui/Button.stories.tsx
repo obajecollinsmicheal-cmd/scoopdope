@@ -20,6 +20,17 @@ export const Primary: Story = {
   },
 };
 
+/**
+ * Secondary variant uses text-gray-600 on bg-white.
+ * Contrast ratio: ~7.1:1 — passes WCAG 2.1 AA (min 4.5:1) and AAA (min 7:1).
+ */
+export const Secondary: Story = {
+  args: {
+    children: 'Secondary Button',
+    variant: 'secondary',
+  },
+};
+
 export const Outline: Story = {
   args: {
     children: 'Outline Button',
@@ -27,9 +38,37 @@ export const Outline: Story = {
   },
 };
 
+export const Ghost: Story = {
+  args: {
+    children: 'Ghost Button',
+    variant: 'ghost',
+  },
+};
+
+export const Success: Story = {
+  args: {
+    children: 'Success Button',
+    variant: 'success',
+  },
+};
+
 export const Disabled: Story = {
   args: {
     children: 'Disabled Button',
     disabled: true,
+  },
+};
+
+export const Small: Story = {
+  args: {
+    children: 'Small',
+    size: 'sm',
+  },
+};
+
+export const Large: Story = {
+  args: {
+    children: 'Large Button',
+    size: 'lg',
   },
 };

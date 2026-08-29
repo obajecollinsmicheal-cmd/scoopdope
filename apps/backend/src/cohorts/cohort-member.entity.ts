@@ -17,6 +17,7 @@ export class CohortMember {
   @Column()
   cohortId: string;
 
+  // Why: cohort members only exist within a cohort; deleting the cohort removes its membership records.
   @ManyToOne(() => Cohort, (c) => c.members, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'cohortId' })
   cohort: Cohort;
@@ -24,6 +25,7 @@ export class CohortMember {
   @Column()
   userId: string;
 
+  // Why: removes student's cohort membership on account deletion (GDPR-compliant).
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;

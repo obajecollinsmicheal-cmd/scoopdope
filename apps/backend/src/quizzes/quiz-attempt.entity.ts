@@ -19,6 +19,7 @@ export class QuizAttempt {
   @Column()
   quizId: string;
 
+  // Why: quiz attempts are tightly scoped to a quiz; deleting the quiz removes all associated attempt records.
   @ManyToOne(() => Quiz, (q) => q.attempts, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'quizId' })
   quiz: Quiz;
@@ -26,6 +27,7 @@ export class QuizAttempt {
   @Column()
   userId: string;
 
+  // Why: attempts belong to a user; deleting the user removes their attempt history (GDPR-compliant account deletion).
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
@@ -42,6 +44,7 @@ export class QuizAttempt {
   @Column('text', { nullable: true })
   feedback: string;
 
+  // Why: ORM-level cascade so persisting an attempt automatically saves its answers in the same transaction.
   @OneToMany(() => QuizAttemptAnswer, (a) => a.attempt, { cascade: true })
   answers: QuizAttemptAnswer[];
 

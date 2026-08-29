@@ -17,6 +17,7 @@ export class CourseVersion {
   @Column()
   courseId: string;
 
+  // Why: course versions document course history; deleting the course makes versions meaningless.
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;
@@ -36,6 +37,7 @@ export class CourseVersion {
   @Column({ nullable: true })
   createdById: string;
 
+  // Why: SET NULL preserves version history if creator account is deleted; maintains audit trail.
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'createdById' })
   createdBy: User;

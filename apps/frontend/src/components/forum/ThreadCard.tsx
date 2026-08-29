@@ -33,7 +33,7 @@ export function ThreadCard({ thread, courseId }: ThreadCardProps) {
       </div>
       <div className="mt-2">
         <VoteButton
-          type="thread"
+          type="post"
           id={thread.id}
           initialUpvotes={thread.upvotes}
           initialDownvotes={thread.downvotes}

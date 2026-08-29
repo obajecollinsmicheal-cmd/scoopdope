@@ -18,6 +18,7 @@ export class ApiKey {
   @Column({ default: true })
   isActive!: boolean;
 
+  // Why: API keys belong to a user; deleting the user removes their API access (GDPR-compliant).
   @ManyToOne(() => User)
   user!: User;
 

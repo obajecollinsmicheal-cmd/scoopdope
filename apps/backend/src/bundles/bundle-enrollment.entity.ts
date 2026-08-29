@@ -19,6 +19,7 @@ export class BundleEnrollment {
   @Column()
   userId: string;
 
+  // Why: enrollment records belong to the user; account deletion should clean them up.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
@@ -26,6 +27,7 @@ export class BundleEnrollment {
   @Column()
   bundleId: string;
 
+  // Why: if a bundle is removed, its enrollment records have no parent and should be removed too.
   @ManyToOne(() => Bundle, (bundle) => bundle.enrollments, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'bundleId' })
   bundle: Bundle;

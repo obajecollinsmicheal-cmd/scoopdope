@@ -17,6 +17,7 @@ export class Progress {
   @Column()
   userId: string;
 
+  // Why: progress records belong to a user; deleting the user removes their progress (GDPR-compliant).
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
@@ -24,6 +25,7 @@ export class Progress {
   @Column()
   courseId: string;
 
+  // Why: if a course is deleted, tracking records for it are removed to prevent orphan progress data.
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;

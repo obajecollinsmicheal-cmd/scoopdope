@@ -29,4 +29,7 @@ export const reviewsApi = {
 
   submitInstructorReply: (courseId: string, reviewId: string, text: string) =>
     api.post(`/courses/${courseId}/reviews/${reviewId}/reply`, { text }).then((r) => r.data),
+
+  flagReview: (courseId: string, reviewId: string) =>
+    api.patch(`/courses/${courseId}/reviews/${reviewId}/flag`).then((r) => r.data),
 };

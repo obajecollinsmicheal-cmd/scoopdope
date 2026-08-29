@@ -16,6 +16,8 @@ export enum AuditAction {
   ADMIN_ACTION = 'admin.action',
   ROLE_CHANGED = 'admin.role_changed',
   USER_BANNED = 'admin.user_banned',
+  USER_DELETED = 'admin.user_deleted',
+  USER_BULK_DELETED = 'admin.user_bulk_deleted',
   SECRET_ROTATED = 'secret.rotated',
   GDPR_DATA_EXPORT = 'gdpr.data_export',
   GDPR_ACCOUNT_DELETION = 'gdpr.account_deletion',

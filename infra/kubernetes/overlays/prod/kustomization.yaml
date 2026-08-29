@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: production
+
+resources:
+  - ../../
+
+namePrefix: prod-
+
+commonLabels:
+  environment: production
+
+replicas:
+  - name: prod-scoopdope-backend
+    count: 5
+
+patchesStrategicMerge:
+  - deployment-patch.yaml
+
+configMapGenerator:
+  - name: scoopdope-backend-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=warn
+      - NODE_ENV=production
+
+# Use external secrets in production (configure this per your secret management solution)
+secretGenerator:
+  - name: scoopdope-backend-secrets
+    envs:
+      - secrets.env
+    behavior: merge

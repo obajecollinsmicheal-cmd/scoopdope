@@ -20,6 +20,7 @@ export class Cohort {
   @Column()
   courseId: string;
 
+  // Why: a cohort is a delivery of a course; removing the course makes the cohort meaningless.
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;
@@ -42,10 +43,12 @@ export class Cohort {
   @Column()
   instructorId: string;
 
+  // Why: instructor deletion removes their cohorts; consider SET NULL to preserve cohorts for enrolled students.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'instructorId' })
   instructor: User;
 
+  // Why: ORM-level cascade so adding members via the cohort entity persists them automatically.
   @OneToMany(() => CohortMember, (m) => m.cohort, { cascade: true })
   members: CohortMember[];
 

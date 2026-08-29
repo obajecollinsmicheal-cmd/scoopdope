@@ -191,6 +191,10 @@ impl ReputationContract {
         let mut reputation = Self::get_reputation_record(env.clone(), user.clone())
             .expect("User has no reputation record");
 
+        if reputation.score == 0 {
+            return;
+        }
+
         let old_score = reputation.score;
         Self::apply_decay_if_needed(&env, &mut reputation, current_ledger);
 
@@ -336,10 +340,116 @@ impl ReputationContract {
         let ledgers_since_update = current_ledger.saturating_sub(reputation.last_updated);
         if ledgers_since_update >= config.decay_interval {
             let decay_periods = ledgers_since_update / config.decay_interval;
-            let decay_amount = config.decay_rate * (decay_periods as i128);
-            reputation.score = reputation.score.saturating_add(decay_amount);
-            reputation.score = reputation.score.max(0); // can't go negative
+            // decay_rate is negative (e.g., -1), so we negate it to get positive value for subtraction
+            let decay_amount = (-config.decay_rate) * (decay_periods as i128);
+            reputation.score = reputation.score.saturating_sub(decay_amount);
             reputation.last_updated = current_ledger;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soroban_sdk::testutils::{Address as _, Env};
+
+    #[test]
+    fn test_apply_decay_skips_zero_reputation() {
+        let env = Env::default();
+        let admin = Address::random(&env);
+        env.mock_all_auths();
+
+        ReputationContract::initialize(env.clone(), admin.clone());
+
+        let user = Address::random(&env);
+        let mut reputation = ReputationRecord {
+            user: user.clone(),
+            score: 0,
+            level: 1,
+            last_updated: 100,
+            total_updates: 0,
+        };
+
+        // Simulate decay on a zero-reputation account
+        let current_ledger = 100 + (5000 * 1000);
+        ReputationContract::apply_decay_if_needed(&env, &mut reputation, current_ledger);
+        assert_eq!(reputation.score, 0, "Zero reputation should remain zero");
+
+        // Store the zero-reputation record and call apply_decay via public fn
+        env.storage()
+            .persistent()
+            .set(&DataKey::Reputation(user.clone()), &reputation);
+
+        ReputationContract::apply_decay(env.clone(), admin.clone(), user.clone());
+
+        // Score should still be zero and no decay event should change it
+        let updated = ReputationContract::get_reputation_record(env, user).unwrap();
+        assert_eq!(updated.score, 0, "apply_decay must skip zero-reputation accounts");
+    }
+
+    #[test]
+    fn test_decay_larger_than_score_yields_zero() {
+        let env = Env::default();
+        let admin = Address::random(&env);
+        env.mock_all_auths();
+
+        ReputationContract::initialize(env.clone(), admin.clone());
+
+        let user = Address::random(&env);
+        let mut reputation = ReputationRecord {
+            user: user.clone(),
+            score: 50,
+            level: 1,
+            last_updated: 100,
+            total_updates: 0,
+        };
+
+        // Apply decay that's larger than current score
+        // decay_rate = -1, decay_interval = 1000
+        // After 5000 ledgers, decay = 1 * 5 = 5 periods worth
+        let current_ledger = 100 + (5000 * 1000); // Much larger than score
+        ReputationContract::apply_decay_if_needed(&env, &mut reputation, current_ledger);
+
+        // Score should be clamped at 0, not negative
+        assert_eq!(reputation.score, 0, "Score should be 0 after decay larger than initial score");
+    }
+
+    #[test]
+    fn test_calculate_level_handles_zero_score() {
+        let zero_level = ReputationContract::calculate_level(0);
+        assert_eq!(zero_level, 1, "Zero score should give level 1");
+    }
+
+    #[test]
+    fn test_apply_decay_prevents_negative_scores() {
+        let env = Env::default();
+        let admin = Address::random(&env);
+        env.mock_all_auths();
+
+        ReputationContract::initialize(env.clone(), admin.clone());
+
+        let user = Address::random(&env);
+        let mut reputation = ReputationRecord {
+            user: user.clone(),
+            score: 100,
+            level: 2,
+            last_updated: 1000,
+            total_updates: 1,
+        };
+
+        let decay_config = DecayConfig {
+            enabled: true,
+            decay_rate: -1,
+            decay_interval: 100,
+        };
+        env.storage().instance().set(&DataKey::DecayConfig, &decay_config);
+
+        // Simulate decay after 1000 ledgers (10 decay periods * -1 = -10)
+        let current_ledger = 2000;
+        ReputationContract::apply_decay_if_needed(&env, &mut reputation, current_ledger);
+
+        // Score should be 90, not negative
+        assert!(reputation.score >= 0, "Score should never be negative");
+        assert_eq!(reputation.score, 90, "Score should decrease by decay amount");
     }
 }

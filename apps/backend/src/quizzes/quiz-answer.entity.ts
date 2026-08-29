@@ -15,6 +15,7 @@ export class QuizAnswer {
   @Column()
   questionId: string;
 
+  // Why: quiz answers are options for a question; deleting the question removes its answer options.
   @ManyToOne(() => QuizQuestion, (q) => q.answers, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'questionId' })
   question: QuizQuestion;

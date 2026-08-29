@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: scoopdope-backend
+
+namespace: default
+
+resources:
+  - backend-serviceaccount.yaml
+  - backend-configmap.yaml
+  - backend-secret.yaml
+  - backend-service.yaml
+  - backend-deployment.yaml
+
+commonLabels:
+  app: scoopdope-backend
+  managed-by: kustomize
+
+commonAnnotations:
+  description: "Scoopdope Backend Kubernetes Deployment"
+
+images:
+  - name: scoopdope/backend
+    newName: scoopdope/backend
+    newTag: latest
+
+replicas:
+  - name: scoopdope-backend
+    count: 3
+
+# Environment variables that can be customized per environment
+vars:
+  - name: HEALTH_DISK_PATH
+    objref:
+      kind: ConfigMap
+      name: scoopdope-backend-config
+      apiVersion: v1
+    fieldref:
+      fieldpath: data.HEALTH_DISK_PATH
+
+# Patches for different environments can be added via overlays
+# See: overlays/dev, overlays/staging, overlays/prod

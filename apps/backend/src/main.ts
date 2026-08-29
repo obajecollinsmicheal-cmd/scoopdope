@@ -68,6 +68,7 @@ async function bootstrap() {
 
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  app.enableShutdownHooks();
   const configService = app.get(ConfigService);
 
   const port = configService.get<number>('port');
@@ -114,8 +115,10 @@ async function bootstrap() {
         '### Versioning Policy\n\n' +
         '- Backward-compatible changes (new fields, new endpoints) are additive within a version\n' +
         '- Breaking changes trigger a new version (e.g., v2)\n' +
-        '- Deprecated versions receive a 90-day sunset window before removal\n' +
-        '- Clients should check `X-API-Version` and `X-API-Deprecated` response headers\n\n' +
+        '- Deprecated versions receive a **90-day** sunset window before removal\n' +
+        '- Clients should monitor `X-API-Version` and `X-API-Deprecated` response headers\n\n' +
+        '📖 **Full versioning policy, deprecation timeline, and migration guide:** ' +
+        '[docs/api-versioning.md](https://github.com/augustina-jpg/scoopdope/blob/main/docs/api-versioning.md)\n\n' +
         '## Authentication\n\n' +
         'This API uses JWT Bearer tokens for authentication.\n\n' +
         '### Getting Started\n\n' +

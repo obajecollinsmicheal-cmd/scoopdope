@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scoopdope-backend-config
+  namespace: default
+  labels:
+    app: scoopdope-backend
+data:
+  LOG_LEVEL: "info"
+  CORS_CREDENTIALS: "true"
+  CORS_MAX_AGE: "86400"
+  THROTTLE_TTL: "60000"
+  THROTTLE_LIMIT: "100"
+  AWS_REGION: "us-east-1"
+  MODERATION_TOXICITY_THRESHOLD: "0.7"
+  ELASTICSEARCH_NODE: "http://elasticsearch:9200"
+  # Database options
+  DB_LOGGING: "false"
+  DB_POOL_SIZE: "10"
+  DB_IDLE_TIMEOUT: "10000"
+  DB_SSL_REJECT_UNAUTHORIZED: "true"
+  # Health check configuration
+  HEALTH_DISK_PATH: "/tmp"

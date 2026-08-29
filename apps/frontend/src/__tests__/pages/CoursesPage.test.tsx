@@ -67,4 +67,38 @@ describe('CoursesPage', () => {
     await waitFor(() => expect(screen.getByText('DeFi on Stellar')).toBeInTheDocument());
     expect(screen.queryByText('Intro to Stellar Blockchain')).not.toBeInTheDocument();
   });
+
+  it('announces result count to screen readers via aria-live region', async () => {
+    render(<CoursesPage />);
+
+    // Wait for initial courses to load (3 mock courses)
+    await waitFor(() =>
+      expect(screen.getByText('Intro to Stellar Blockchain')).toBeInTheDocument()
+    );
+
+    // The live region should announce the total count without a query
+    const liveRegion = screen.getByText(/3 courses found/i);
+    expect(liveRegion).toBeInTheDocument();
+    expect(liveRegion).toHaveAttribute('aria-live', 'polite');
+    expect(liveRegion).toHaveAttribute('aria-atomic', 'true');
+  });
+
+  it('includes the search query in the announced result count', async () => {
+    render(<CoursesPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText('Intro to Stellar Blockchain')).toBeInTheDocument()
+    );
+
+    const input = screen.getByPlaceholderText('Search courses…');
+    fireEvent.change(input, { target: { value: 'Soroban' } });
+
+    // Wait for the filtered result and live region update
+    await waitFor(() =>
+      expect(screen.getByText(/courses found for "Soroban"/i)).toBeInTheDocument()
+    );
+
+    const liveRegion = screen.getByText(/courses found for "Soroban"/i);
+    expect(liveRegion).toHaveAttribute('aria-live', 'polite');
+  });
 });

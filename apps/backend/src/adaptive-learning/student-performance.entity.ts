@@ -17,6 +17,7 @@ export class StudentPerformance {
   @Column()
   userId: string;
 
+  // Why: performance records belong to a student; deleting the user removes their adaptive learning history.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;

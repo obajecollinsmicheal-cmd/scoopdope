@@ -25,4 +25,4 @@ const parsed = {
   },
 };
 
-console.log(JSON.stringify(parsed, null, 2));
+process.stdout.write(JSON.stringify(parsed, null, 2) + '\n');

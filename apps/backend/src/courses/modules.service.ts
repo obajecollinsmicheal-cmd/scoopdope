@@ -45,7 +45,65 @@ export class ModulesService {
   async remove(id: string) {
     const mod = await this.repo.findOne({ where: { id } });
     if (!mod) throw new NotFoundException('Module not found');
-    return this.repo.remove(mod);
+    
+    const courseId = mod.courseId;
+    await this.repo.remove(mod);
+    
+    // Renumber remaining modules to fill gaps
+    await this.rebuildPositions(courseId);
+  }
+
+  /**
+   * Rebuild module positions (order field) to be contiguous starting from 0 or 1.
+   * Fills any gaps left by deleted modules.
+   * 
+   * @param courseId - The course ID
+   */
+  private async rebuildPositions(courseId: string): Promise<void> {
+    const modules = await this.repo.find({
+      where: { courseId },
+      order: { order: 'ASC' },
+    });
+
+    // Reassign sequential positions
+    for (let i = 0; i < modules.length; i++) {
+      modules[i].order = i + 1; // positions start from 1
+      await this.repo.save(modules[i]);
+    }
+  }
+
+  /**
+   * Reorder modules by updating the order field.
+   * After reordering, all positions are validated to be contiguous.
+   * 
+   * @param courseId - The course ID
+   * @param moduleOrder - Array of module IDs in desired order
+   * @throws {NotFoundException} if any module not found
+   */
+  async reorder(courseId: string, moduleOrder: string[]): Promise<CourseModule[]> {
+    // Fetch all modules for this course
+    const modules = await this.repo.find({ where: { courseId } });
+    
+    // Validate all requested module IDs exist
+    const moduleMap = new Map(modules.map((m) => [m.id, m]));
+    for (const moduleId of moduleOrder) {
+      if (!moduleMap.has(moduleId)) {
+        throw new NotFoundException(`Module ${moduleId} not found in course ${courseId}`);
+      }
+    }
+
+    // Reorder modules according to the provided array
+    for (let i = 0; i < moduleOrder.length; i++) {
+      const module = moduleMap.get(moduleOrder[i])!;
+      module.order = i + 1;
+      await this.repo.save(module);
+    }
+
+    // Return updated modules in order
+    return this.repo.find({
+      where: { courseId },
+      order: { order: 'ASC' },
+    });
   }
 
   /** Admin override: clear the release date to unlock immediately. */

@@ -23,6 +23,7 @@ export class QuizQuestion {
   @Column()
   quizId: string;
 
+  // Why: quiz questions are part of a quiz; deleting the quiz removes its questions to prevent orphan content.
   @ManyToOne(() => Quiz, (q) => q.questions, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'quizId' })
   quiz: Quiz;
@@ -39,6 +40,7 @@ export class QuizQuestion {
   @Column({ default: 0 })
   order: number;
 
+  // Why: ORM-level cascade so creating a question with answers persists them in the same transaction.
   @OneToMany(() => QuizAnswer, (a) => a.question, { cascade: true })
   answers: QuizAnswer[];
 }

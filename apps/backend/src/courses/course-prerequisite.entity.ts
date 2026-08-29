@@ -18,6 +18,7 @@ export class CoursePrerequisite {
   @Column()
   courseId: string;
 
+  // Why: deleting a course removes prerequisite relationships to cascade cleanup.
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;
@@ -25,6 +26,7 @@ export class CoursePrerequisite {
   @Column()
   prerequisiteId: string;
 
+  // Why: deleting a prerequisite course removes its references to maintain referential integrity.
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'prerequisiteId' })
   prerequisite: Course;

@@ -7,6 +7,7 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
+import { DatabaseConfigValidator } from './common/validators/database-config.validator';
 import { AuthModule } from './auth/auth.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { DatabaseModule } from './database/database.module';
@@ -71,16 +72,29 @@ import { validationSchema } from './config/validation.schema';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get<string>('database.host'),
-        port: config.get<number>('database.port'),
-        username: config.get<string>('database.username'),
-        password: config.get<string>('database.password'),
-        database: config.get<string>('database.name'),
-        autoLoadEntities: true,
-        synchronize: config.get<string>('nodeEnv') !== 'production',
-      }),
+      useFactory: (config: ConfigService) => {
+        const nodeEnv = config.get<string>('nodeEnv');
+        const synchronize = nodeEnv !== 'production' && nodeEnv !== 'staging';
+
+        // Validate that synchronize is not enabled in production/staging
+        DatabaseConfigValidator.validateSynchronizeConfig(nodeEnv, synchronize);
+
+        return {
+          type: 'postgres',
+          host: config.get<string>('database.host'),
+          port: config.get<number>('database.port'),
+          username: config.get<string>('database.username'),
+          password: config.get<string>('database.password'),
+          database: config.get<string>('database.name'),
+          autoLoadEntities: true,
+          synchronize,
+          extra: {
+            max: config.get<number>('database.poolSize') || 50,
+            idleTimeoutMillis: 30_000,
+            connectionTimeoutMillis: 5_000,
+          },
+        };
+      },
     }),
     CacheModule.registerAsync({
       isGlobal: true,
@@ -92,6 +106,7 @@ import { validationSchema } from './config/validation.schema';
         ttl: 60,
       }),
     }),
+    DistributedLockModule,
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

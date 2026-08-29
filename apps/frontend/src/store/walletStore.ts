@@ -2,12 +2,27 @@ import { create } from 'zustand';
 
 interface WalletState {
   address: string | null;
+  /** Native XLM balance string */
   balance: string | null;
+  /** BST token balance string — kept in the store so any component can read it */
+  bstBalance: string | null;
+  /**
+   * Incrementing counter. Bump this to trigger a silent re-fetch of the BST
+   * balance in any component that uses it as a SWR key.
+   *
+   * Usage:
+   *   useWalletStore.getState().refreshBstBalance()
+   *   // or inside a component:
+   *   const { refreshBstBalance } = useWalletStore()
+   */
+  bstBalanceRefreshKey: number;
   isConnecting: boolean;
   error: string | null;
   balanceError: boolean;
   setAddress: (address: string | null) => void;
   setBalance: (balance: string | null) => void;
+  setBstBalance: (bstBalance: string | null) => void;
+  refreshBstBalance: () => void;
   setIsConnecting: (v: boolean) => void;
   setError: (error: string | null) => void;
   setBalanceError: (v: boolean) => void;
@@ -17,13 +32,27 @@ interface WalletState {
 export const useWalletStore = create<WalletState>((set) => ({
   address: null,
   balance: null,
+  bstBalance: null,
+  bstBalanceRefreshKey: 0,
   isConnecting: false,
   error: null,
   balanceError: false,
   setAddress: (address) => set({ address }),
   setBalance: (balance) => set({ balance }),
+  setBstBalance: (bstBalance) => set({ bstBalance }),
+  /** Increment the key so SWR re-validates the BST balance fetch */
+  refreshBstBalance: () =>
+    set((s) => ({ bstBalanceRefreshKey: s.bstBalanceRefreshKey + 1 })),
   setIsConnecting: (isConnecting) => set({ isConnecting }),
   setError: (error) => set({ error }),
   setBalanceError: (balanceError) => set({ balanceError }),
-  disconnect: () => set({ address: null, balance: null, error: null, balanceError: false }),
+  disconnect: () =>
+    set({
+      address: null,
+      balance: null,
+      bstBalance: null,
+      bstBalanceRefreshKey: 0,
+      error: null,
+      balanceError: false,
+    }),
 }));

@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { EncryptionService } from '../common/encryption.service';
 import { KycCustomer, KycStatus } from './kyc-customer.entity';
+import { SubmitKycDocumentsDto } from './dto/submit-kyc-documents.dto';
 
 @Injectable()
 export class KycService {
@@ -24,6 +25,57 @@ export class KycService {
       return Object.assign(new KycCustomer(), { stellarPublicKey, status: 'none' as KycStatus });
     }
     return this.decryptCustomer(customer);
+  }
+
+  async submitDocuments(dto: SubmitKycDocumentsDto): Promise<KycCustomer> {
+    let customer = await this.repo.findOne({ where: { stellarPublicKey: dto.stellarPublicKey } });
+
+    if (!customer) {
+      customer = this.repo.create({
+        stellarPublicKey: dto.stellarPublicKey,
+        status: 'pending',
+      });
+    } else {
+      customer.status = 'pending';
+    }
+
+    customer.documentType = dto.documentType;
+    customer.documentUrl = dto.documentUrl;
+    customer.selfieUrl = dto.selfieUrl ?? null;
+
+    // Submit to KYC provider if configured
+    if (this.apiKey) {
+      try {
+        const res = await fetch('https://api.synaps.io/v4/individual/session', {
+          method: 'POST',
+          headers: {
+            'Client-Id': this.apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            alias: dto.stellarPublicKey,
+            document_type: dto.documentType,
+            document_url: dto.documentUrl,
+            selfie_url: dto.selfieUrl,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const rawProviderId = data.session_id ?? data.id ?? null;
+          customer.providerId = rawProviderId
+            ? this.encryptionService.encrypt(String(rawProviderId))
+            : null;
+        } else {
+          this.logger.warn(
+            `KYC provider returned ${res.status} for ${dto.stellarPublicKey}`
+          );
+        }
+      } catch (err) {
+        this.logger.error(`KYC provider request failed: ${err.message}`);
+      }
+    }
+
+    return this.repo.save(customer);
   }
 
   private decryptCustomer(customer: KycCustomer): KycCustomer {
@@ -97,7 +149,7 @@ export class KycService {
 
     const customer = await this.repo.findOne({ where: { stellarPublicKey: payload.alias } });
     if (!customer) {
-      this.logger.warn(`Webhook received for unknown customer: ${JSON.stringify(where)}`);
+      this.logger.warn(`Webhook received for unknown customer: ${payload.alias}`);
       return;
     }
 

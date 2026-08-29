@@ -19,6 +19,7 @@ export class Credential {
   @Column()
   userId: string;
 
+  // Why: a credential belongs to its user; deleting the user removes ownerless credential records.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
@@ -26,6 +27,7 @@ export class Credential {
   @Column({ nullable: true })
   courseId: string;
 
+  // Why: if a course is deleted, associated credentials are removed; consider SET NULL to preserve on-chain proof records.
   @ManyToOne(() => Course, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'courseId' })
   course: Course;
@@ -33,6 +35,7 @@ export class Credential {
   @Column({ nullable: true })
   bundleId: string;
 
+  // Why: if a bundle is deleted, its issued credentials are removed; consider SET NULL to preserve on-chain proof records.
   @ManyToOne(() => Bundle, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'bundleId' })
   bundle: Bundle;
@@ -40,6 +43,7 @@ export class Credential {
   @Column({ nullable: true })
   learningPathId: string;
 
+  // Why: if a learning path is deleted, its issued credentials are removed; consider SET NULL to preserve on-chain proof records.
   @ManyToOne(() => LearningPath, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'learningPathId' })
   learningPath: LearningPath;

@@ -71,10 +71,10 @@ export default function TransactionList({ publicKey }: Props) {
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-              <th className="pb-1 pr-3 font-medium">Hash</th>
-              <th className="pb-1 pr-3 font-medium">Date</th>
-              <th className="pb-1 pr-3 font-medium">Memo</th>
-              <th className="pb-1 font-medium text-right">Status</th>
+              <th scope="col" className="pb-1 pr-3 font-medium">Hash</th>
+              <th scope="col" className="pb-1 pr-3 font-medium">Date</th>
+              <th scope="col" className="pb-1 pr-3 font-medium">Memo</th>
+              <th scope="col" className="pb-1 font-medium text-right">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">

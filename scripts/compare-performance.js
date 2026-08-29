@@ -35,4 +35,4 @@ Object.keys(current.metrics).forEach(metric => {
   };
 });
 
-console.log(JSON.stringify(comparison, null, 2));
+process.stdout.write(JSON.stringify(comparison, null, 2) + '\n');

@@ -12,7 +12,13 @@ export default function CoursesError({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    Sentry.captureException(error, {
+      contexts: {
+        react: {
+          componentStack: error.stack ?? 'No stack trace available',
+        },
+      },
+    });
   }, [error]);
 
   const reportIssue = () => {

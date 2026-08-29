@@ -1,14 +1,24 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Enrollment } from './enrollment.entity';
+import { EnrollmentConfirmedEvent } from './enrollment-confirmed.event';
 import { PrerequisitesService } from '../courses/prerequisites.service';
 import { CourseVersioningService } from '../courses/course-versioning.service';
 import { MetricsService } from '../metrics/metrics.service';
+import { StellarService } from '../stellar/stellar.service';
 
 @Injectable()
 export class EnrollmentsService {
+  private readonly logger = new Logger(EnrollmentsService.name);
+
   constructor(
     @InjectRepository(Enrollment)
     private repo: Repository<Enrollment>,
@@ -16,6 +26,7 @@ export class EnrollmentsService {
     private prereqService: PrerequisitesService,
     private versioningService: CourseVersioningService,
     private metrics: MetricsService,
+    private stellarService: StellarService,
   ) {}
 
   async enroll(userId: string, courseId: string, adminOverride = false): Promise<Enrollment> {
@@ -33,15 +44,58 @@ export class EnrollmentsService {
         userId,
         courseId,
         enrolledVersionNumber: latestVersion?.versionNumber ?? null,
+        transactionHash: null,
       }),
     );
 
+    // Record the enrollment on-chain. If the Soroban call fails we roll back
+    // the enrollment row so the database never holds an un-anchored record.
+    let transactionHash: string | null = null;
+    try {
+      transactionHash = await this.stellarService.recordEnrollment(userId, courseId);
+      enrollment.transactionHash = transactionHash;
+      await this.repo.save(enrollment);
+      this.logger.log(
+        `Enrollment ${enrollment.id} anchored on-chain (tx: ${transactionHash})`,
+      );
+    } catch (err: any) {
+      this.logger.error(
+        `On-chain enrollment failed for user=${userId} course=${courseId}: ${err.message}`,
+        err.stack,
+      );
+
+      // Remove the DB row — keeps the database consistent.
+      await this.repo.remove(enrollment).catch((removeErr) =>
+        this.logger.error(
+          `Failed to remove enrollment after on-chain failure: ${removeErr.message}`,
+        ),
+      );
+
+      throw new InternalServerErrorException({
+        message: 'Failed to record enrollment on the Stellar network. Please try again.',
+        detail: err.message,
+      });
+    }
+
+    // Emit legacy event consumed by notifications / other listeners.
     this.eventEmitter.emit('enrollment.created', {
       enrollmentId: enrollment.id,
       userId,
       courseId,
       enrolledAt: enrollment.enrolledAt,
     });
+
+    // Emit the richer on-chain confirmed event for analytics and downstream modules.
+    this.eventEmitter.emit(
+      'enrollment.confirmed',
+      new EnrollmentConfirmedEvent({
+        enrollmentId: enrollment.id,
+        userId,
+        courseId,
+        transactionHash,
+        enrolledAt: enrollment.enrolledAt,
+      }),
+    );
 
     this.metrics.incrementEnrollment(courseId, 'all');
 

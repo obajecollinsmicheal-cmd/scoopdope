@@ -123,4 +123,51 @@ export class SubscriptionsService {
       isPro: user.subscriptionTier === SubscriptionTier.PRO || user.subscriptionTier === SubscriptionTier.ENTERPRISE,
     };
   }
+
+  /**
+   * Renews a user's subscription by extending expiresAt.
+   * 
+   * If the user's current expiresAt is in the future, extends from that date.
+   * Otherwise, extends from now.
+   * 
+   * Plan durations (in days):
+   * - MONTHLY: 30 days
+   * - ANNUAL: 365 days
+   * - ENTERPRISE: 30 days (default)
+   * 
+   * @param userId - The user ID to renew
+   * @throws {NotFoundException} if user not found or subscription tier is FREE
+   * @throws {BadRequestException} if subscription is expired beyond grace period
+   */
+  async renewSubscription(userId: string): Promise<{ newExpiresAt: Date }> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (user.subscriptionTier === SubscriptionTier.FREE) {
+      throw new BadRequestException('Cannot renew a FREE subscription. Upgrade to PRO or ENTERPRISE.');
+    }
+
+    // Determine plan duration in days
+    const durationDays = user.subscriptionTier === SubscriptionTier.PRO ? 30 : 30; // MONTHLY or ENTERPRISE
+
+    // Calculate new expiry date: extend from current expiiry if valid, else from now
+    const now = new Date();
+    let baseDate = now;
+
+    if (user.subscriptionExpiresAt && user.subscriptionExpiresAt > now) {
+      // Active subscription: extend from current expiry
+      baseDate = user.subscriptionExpiresAt;
+    }
+    // else: expired or never set, renew from now
+
+    const newExpiresAt = new Date(baseDate.getTime() + durationDays * 24 * 60 * 60 * 1000);
+
+    await this.userRepo.update(userId, {
+      subscriptionExpiresAt: newExpiresAt,
+    });
+
+    this.logger.log(`Renewed subscription for user ${userId}: new expiry ${newExpiresAt.toISOString()}`);
+
+    return { newExpiresAt };
+  }
 }

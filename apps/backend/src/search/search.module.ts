@@ -16,6 +16,12 @@ import { SearchAnalytic } from './search-analytic.entity';
         auth: config.get<string>('elasticsearch.apiKey')
           ? { apiKey: config.get<string>('elasticsearch.apiKey')! }
           : undefined,
+        maxRetries: 3,
+        requestTimeout: 15_000,
+        maxIdleSockets: 10,
+        minIdleSockets: 2,
+        sniffOnStart: false,
+        sniffOnConnectionFault: false,
       }),
     }),
     TypeOrmModule.forFeature([SearchAnalytic]),

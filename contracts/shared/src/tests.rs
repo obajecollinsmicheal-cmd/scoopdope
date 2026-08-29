@@ -10,7 +10,8 @@ fn setup() -> (Env, Address, SharedContractClient<'static>, Address) {
     let client = SharedContractClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
     let governance = Address::generate(&env);
-    client.initialize(&admin, &governance);
+    let version = String::from_str(&env, "1.0.0");
+    client.initialize(&admin, &governance, &version);
     (env, admin, client, governance)
 }
 
@@ -97,6 +98,15 @@ fn test_unassigned_address_has_no_permissions() {
     let (env, _, client, _) = setup();
     let stranger = Address::generate(&env);
     assert!(!client.has_permission(&stranger, &Permission::CreateCourse));
+}
+
+// ── version string ────────────────────────────────────────────────────────────
+
+#[test]
+fn test_version_returns_initialized_string() {
+    let (_, _, client, _) = setup();
+    let version = client.version();
+    assert_eq!(version, String::from_str(&client.env, "1.0.0"));
 }
 
 // ── upgrade & migration ───────────────────────────────────────────────────────

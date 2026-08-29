@@ -78,6 +78,7 @@ export class Course {
   @Column({ nullable: true, type: 'int' })
   maxEnrollment: number | null;
 
+  // Why: SET NULL preserves course when instructor is deleted; course remains accessible but unassigned.
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'instructorId' })
   instructor: User;

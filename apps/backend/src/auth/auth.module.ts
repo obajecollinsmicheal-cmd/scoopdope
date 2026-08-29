@@ -6,6 +6,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UsersModule } from '../users/users.module';
 import { MailModule } from '../mail/mail.module';
 import { AuthService } from './auth.service';
+import { TokenService } from './token.service';
+import { MfaService } from './mfa.service';
+import { OAuthService } from './oauth.service';
 import { StellarAuthService } from './stellar-auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
@@ -18,6 +21,7 @@ import { EncryptionService } from '../common/encryption.service';
 import { ApiKeyStrategy } from './api-key.strategy';
 import { ApiKeyAuthGuard } from './api-key-auth.guard';
 import { AuditModule } from '../audit/audit.module';
+import { GoogleStrategy } from './google.strategy';
 
 @Module({
   imports: [
@@ -37,6 +41,9 @@ import { AuditModule } from '../audit/audit.module';
   ],
   providers: [
     AuthService,
+    TokenService,
+    MfaService,
+    OAuthService,
     StellarAuthService,
     JwtStrategy,
     JwtAuthGuard,
@@ -44,6 +51,7 @@ import { AuditModule } from '../audit/audit.module';
     EncryptionService,
     ApiKeyStrategy,
     ApiKeyAuthGuard,
+    GoogleStrategy,
   ],
   controllers: [AuthController],
   exports: [JwtAuthGuard, RolesGuard, ApiKeyAuthGuard, EncryptionService],

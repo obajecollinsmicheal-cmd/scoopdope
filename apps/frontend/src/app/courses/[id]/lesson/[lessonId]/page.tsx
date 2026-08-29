@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { TranscriptDisplay } from '@/components/courses/TranscriptDisplay';
 import { NotesPanel } from '@/components/courses/NotesPanel';
-import { ChevronLeft, ChevronRight, Layout, BookOpen } from 'lucide-react';
+import { ProgressTracker } from '@/components/courses/ProgressTracker';
+import { ChevronLeft, ChevronRight, Layout, BookOpen, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useVideoShortcuts } from '@/hooks/useVideoShortcuts';
 import { useSyncProgress } from '@/hooks/useSyncProgress';
@@ -19,7 +20,7 @@ export default function LessonPage() {
   const [lesson, setLesson] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
-  const [sidebarTab, setSidebarTab] = useState<'transcript' | 'notes'>('transcript');
+  const [sidebarTab, setSidebarTab] = useState<'transcript' | 'notes' | 'progress'>('transcript');
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const { recordProgress } = useSyncProgress();
@@ -131,6 +132,16 @@ export default function LessonPage() {
             >
               <BookOpen className="w-4 h-4" /> Notes
             </button>
+            <button
+              onClick={() => setSidebarTab('progress')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-medium border-b-2 transition-colors ${
+                sidebarTab === 'progress'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4" /> Progress
+            </button>
           </div>
 
           <div className="flex-1 overflow-hidden">
@@ -140,13 +151,20 @@ export default function LessonPage() {
                 currentTime={currentTime}
                 onSeek={handleSeek}
               />
-            ) : (
+            ) : sidebarTab === 'notes' ? (
               <NotesPanel
                 lessonId={lessonId as string}
                 lessonTitle={lesson.title}
                 currentTime={currentTime}
                 onSeek={handleSeek}
               />
+            ) : (
+              <div className="p-4 overflow-y-auto h-full">
+                <ProgressTracker
+                  courseId={courseId as string}
+                  compact
+                />
+              </div>
             )}
           </div>
         </aside>

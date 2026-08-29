@@ -23,6 +23,7 @@ export class CourseAccessControl {
   @Column()
   courseId: string;
 
+  // Why: access control entries are scoped to a course; deleting the course removes all its access grants.
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;
@@ -30,6 +31,7 @@ export class CourseAccessControl {
   @Column()
   userId: string;
 
+  // Why: access grants for a deleted user should be removed to keep access control lists clean.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;

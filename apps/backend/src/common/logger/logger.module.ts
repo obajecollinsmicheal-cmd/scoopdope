@@ -10,10 +10,11 @@ import * as winston from 'winston';
       useFactory: (configService: ConfigService) => {
         const logLevel = configService.get<string>('LOG_LEVEL', 'info');
         const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+        const logFormat = configService.get<string>('LOG_FORMAT', nodeEnv === 'production' ? 'json' : 'text');
 
-        // Define log format based on environment
-        const logFormat =
-          nodeEnv === 'production'
+        // Define log format based on configuration
+        const winstonFormat =
+          logFormat === 'json'
             ? winston.format.combine(
                 winston.format.timestamp(),
                 winston.format.errors({ stack: true }),
@@ -32,7 +33,7 @@ import * as winston from 'winston';
 
         return {
           level: logLevel,
-          format: logFormat,
+          format: winstonFormat,
           transports: [
             // Console transport - logs to stdout for container orchestrators
             new winston.transports.Console({

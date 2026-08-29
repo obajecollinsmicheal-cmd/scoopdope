@@ -19,6 +19,7 @@ export class Enrollment {
   @Column()
   userId: string;
 
+  // Why: enrollments belong to a user; deleting the user removes their course enrollments.
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
@@ -26,6 +27,7 @@ export class Enrollment {
   @Column()
   courseId: string;
 
+  // Why: if a course is deleted, all enrollments in it are removed to prevent orphan records.
   @ManyToOne(() => Course, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   course: Course;
@@ -39,4 +41,11 @@ export class Enrollment {
   /** The course version number the student enrolled on. Null = pre-versioning. */
   @Column({ nullable: true, type: 'int' })
   enrolledVersionNumber: number | null;
+
+  /**
+   * Soroban transaction hash recorded when the enrollment was confirmed on-chain.
+   * Null if the on-chain call was not attempted or is pending.
+   */
+  @Column({ nullable: true, type: 'varchar', length: 64 })
+  transactionHash: string | null;
 }

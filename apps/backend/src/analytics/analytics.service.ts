@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
+import { DistributedLockService } from '../common/distributed-lock.service';
 import { CourseAnalytics } from './course-analytics.entity';
 import { Enrollment } from '../enrollments/enrollment.entity';
 import { Progress } from '../progress/progress.entity';
@@ -32,7 +33,9 @@ export interface PlatformAnalytics {
 @Injectable()
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
-  private readonly CACHE_TTL = 3600;
+  private readonly CACHE_TTL = 300;
+
+  private readonly CACHE_PREFIX = 'analytics:';
 
   constructor(
     @InjectRepository(CourseAnalytics) private analyticsRepo: Repository<CourseAnalytics>,
@@ -41,10 +44,11 @@ export class AnalyticsService {
     @InjectRepository(Review) private reviewRepo: Repository<Review>,
     @InjectRepository(User) private userRepo: Repository<User>,
     @Inject(CACHE_MANAGER) private cache: Cache,
+    private readonly distributedLockService: DistributedLockService,
   ) {}
 
   async getAnalytics(courseId: string): Promise<CourseAnalytics> {
-    const cacheKey = `analytics:${courseId}`;
+    const cacheKey = `${this.CACHE_PREFIX}${courseId}`;
     const cached = await this.cache.get<CourseAnalytics>(cacheKey);
     if (cached) return cached;
 
@@ -104,12 +108,12 @@ export class AnalyticsService {
     });
 
     const saved = await this.analyticsRepo.save(record);
-    await this.cache.del(`analytics:${courseId}`);
+    await this.cache.set(`${this.CACHE_PREFIX}${courseId}`, saved, this.CACHE_TTL);
     return saved;
   }
 
   async getPlatformAnalytics(): Promise<PlatformAnalytics> {
-    const cacheKey = 'analytics:platform';
+    const cacheKey = `${this.CACHE_PREFIX}platform`;
     const cached = await this.cache.get<PlatformAnalytics>(cacheKey);
     if (cached) return cached;
 
@@ -225,18 +229,25 @@ export class AnalyticsService {
   /** Hourly: aggregate all courses */
   @Cron(CronExpression.EVERY_HOUR)
   async aggregateAll(): Promise<void> {
-    this.logger.log('Running hourly analytics aggregation');
-    const courseIds = await this.enrollmentRepo
-      .createQueryBuilder('e')
-      .select('DISTINCT e.courseId', 'courseId')
-      .getRawMany<{ courseId: string }>();
+    const lockKey = 'lock:cron:analytics:aggregateAll';
+    const result = await this.distributedLockService.withLock(lockKey, async () => {
+      this.logger.log('Running hourly analytics aggregation');
+      const courseIds = await this.enrollmentRepo
+        .createQueryBuilder('e')
+        .select('DISTINCT e.courseId', 'courseId')
+        .getRawMany<{ courseId: string }>();
 
-    for (const { courseId } of courseIds) {
-      try {
-        await this.aggregateCourse(courseId);
-      } catch (err: any) {
-        this.logger.error(`Failed to aggregate course ${courseId}: ${err.message}`);
+      for (const { courseId } of courseIds) {
+        try {
+          await this.aggregateCourse(courseId);
+        } catch (err: any) {
+          this.logger.error(`Failed to aggregate course ${courseId}: ${err.message}`);
+        }
       }
+    }, 60);
+
+    if (result === null) {
+      this.logger.debug('Skipping hourly analytics aggregation because another instance holds the lock');
     }
   }
 }
